@@ -1,0 +1,17 @@
+[project]
+name = "royalbistro"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "customtkinter>=6.0.0",
+    "pillow>=12.3.0",
+    "python-escpos>=3.1",
+    "pywin32>=311",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.22.2",
+]

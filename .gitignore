@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime output and local application data
+Output/
+data/session_sales.json
+data/restaurant.json
+data/access.pin
+*.log
+
+# Virtual environments
+.venv/
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
