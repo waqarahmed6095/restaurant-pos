@@ -61,6 +61,14 @@ except Exception:
     ESC_POS_AVAILABLE = False
 
 try:
+    import win32print
+
+    WIN32_PRINT_AVAILABLE = True
+except ImportError:
+    win32print = None
+    WIN32_PRINT_AVAILABLE = False
+
+try:
     from PIL import Image, ImageTk
 
     PIL_AVAILABLE = True
@@ -2160,13 +2168,51 @@ class RestaurantPOS(ctk.CTk):
 
         return file_path
 
-    def print_with_escpos(
-        self, text: str, printer_name: str = "BlackCopper 80mm Series"
-    ) -> tuple:
+    def get_windows_printers(self) -> list[str]:
+        if not WIN32_PRINT_AVAILABLE or win32print is None:
+            return []
+        try:
+            flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+            return [entry[2] for entry in win32print.EnumPrinters(flags)]
+        except Exception:
+            return []
+
+    def get_default_printer(self) -> str | None:
+        if not WIN32_PRINT_AVAILABLE or win32print is None:
+            return None
+        try:
+            return win32print.GetDefaultPrinter()
+        except Exception:
+            printers = self.get_windows_printers()
+            return printers[0] if printers else None
+
+    def print_with_windows_spooler(self, text: str, printer_name: str) -> None:
+        if not WIN32_PRINT_AVAILABLE or win32print is None:
+            raise RuntimeError("Windows printing is not available")
+        handle = win32print.OpenPrinter(printer_name)
+        try:
+            win32print.StartDocPrinter(
+                handle, 1, ("Restaurant POS receipt", None, "RAW")
+            )
+            try:
+                win32print.StartPagePrinter(handle)
+                win32print.WritePrinter(handle, text.encode("cp437", errors="replace"))
+                win32print.EndPagePrinter(handle)
+            finally:
+                win32print.EndDocPrinter(handle)
+        finally:
+            win32print.ClosePrinter(handle)
+
+    def print_with_escpos(self, text: str, printer_name: str | None = None) -> tuple:
         """
         Print to ESC/POS printer. If printer is unavailable, save to file instead.
         Returns: (success: bool, message: str, file_path: str or None)
         """
+        printer_name = printer_name or self.get_default_printer()
+        if not printer_name:
+            file_path = self.print_to_file(text)
+            return (False, f"No Windows printer found, saved to file: {file_path}", file_path)
+
         if ESC_POS_AVAILABLE and Win32Raw is not None:
             try:
                 printer = None
@@ -2195,20 +2241,17 @@ class RestaurantPOS(ctk.CTk):
                         except:
                             pass
             except Exception as printer_error:
-                # Printer not available, fall back to file
-                print(f"Printer not available: {printer_error}")
-                file_path = self.print_to_file(text)
-                return (
-                    False,
-                    f"Printer unavailable, saved to file: {file_path}",
-                    file_path,
-                )
-        else:
-            # ESC/POS not available, save to file
+                print(f"ESC/POS unavailable on {printer_name}: {printer_error}")
+
+        try:
+            self.print_with_windows_spooler(text, printer_name)
+            return (True, f"sent to printer: {printer_name}", None)
+        except Exception as printer_error:
+            print(f"Windows printer unavailable: {printer_error}")
             file_path = self.print_to_file(text)
             return (
                 False,
-                f"ESC/POS not available, saved to file: {file_path}",
+                f"Printer unavailable, saved to file: {file_path}",
                 file_path,
             )
 
