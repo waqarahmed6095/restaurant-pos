@@ -3,23 +3,18 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from repositories.menu_repository import load_menu_items as repository_load_menu_items
+from main import (build_kitchen_slip_text, build_receipt_text,
+                  delete_session_order, get_session_id, get_session_orders,
+                  get_session_sales, hash_pin, load_menu_items,
+                  record_session_order, record_session_sale, save_menu_items,
+                  save_pin, verify_pin)
+from repositories.menu_repository import \
+    load_menu_items as repository_load_menu_items
 from repositories.restaurant_repository import load_restaurant, save_restaurant
-from services.receipt_service import build_receipt_text as service_build_receipt_text
-from repositories.sales_repository import get_sales_report as repository_get_sales_report
-from main import hash_pin, save_pin, verify_pin
-from main import (
-    build_receipt_text,
-    build_kitchen_slip_text,
-    delete_session_order,
-    get_session_id,
-    get_session_orders,
-    get_session_sales,
-    load_menu_items,
-    record_session_order,
-    record_session_sale,
-    save_menu_items,
-)
+from repositories.sales_repository import \
+    get_sales_report as repository_get_sales_report
+from services.receipt_service import \
+    build_receipt_text as service_build_receipt_text
 
 
 class ReceiptFormattingTests(unittest.TestCase):
@@ -52,7 +47,9 @@ class ReceiptFormattingTests(unittest.TestCase):
             }
         ]
 
-        receipt = build_receipt_text(order_items, "Indoor", "1", include_service_charge=False)
+        receipt = build_receipt_text(
+            order_items, "Indoor", "1", include_service_charge=False
+        )
         lines = receipt.splitlines()
 
         self.assertFalse(any("Subtotal:" in line for line in lines))
@@ -79,16 +76,36 @@ class ReceiptFormattingTests(unittest.TestCase):
         self.assertNotIn("TOTAL:", kitchen)
 
     def test_receipts_include_order_number(self):
-        order_items = [{"name": "Chicken Burger", "size": "Standard", "quantity": 1, "unit_price": 299, "total_price": 299}]
+        order_items = [
+            {
+                "name": "Chicken Burger",
+                "size": "Standard",
+                "quantity": 1,
+                "unit_price": 299,
+                "total_price": 299,
+            }
+        ]
 
-        receipt = build_receipt_text(order_items, "Indoor", "1", order_number="2026-07-06-001")
-        kitchen = build_kitchen_slip_text(order_items, "Indoor", "1", order_number="2026-07-06-001")
+        receipt = build_receipt_text(
+            order_items, "Indoor", "1", order_number="2026-07-06-001"
+        )
+        kitchen = build_kitchen_slip_text(
+            order_items, "Indoor", "1", order_number="2026-07-06-001"
+        )
 
         self.assertIn("Order No: 2026-07-06-001", receipt)
         self.assertIn("Order No: 2026-07-06-001", kitchen)
 
     def test_receipt_includes_configured_restaurant_details(self):
-        order_items = [{"name": "Tea", "size": "Standard", "quantity": 1, "unit_price": 100, "total_price": 100}]
+        order_items = [
+            {
+                "name": "Tea",
+                "size": "Standard",
+                "quantity": 1,
+                "unit_price": 100,
+                "total_price": 100,
+            }
+        ]
 
         receipt = service_build_receipt_text(
             order_items,
@@ -145,9 +162,15 @@ class ReceiptFormattingTests(unittest.TestCase):
     def test_records_session_sales_in_storage_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_path = Path(temp_dir) / "session_sales.json"
-            first_total = record_session_sale(250.0, storage_path=storage_path, now=datetime(2026, 7, 6, 19, 0))
-            second_total = record_session_sale(75.0, storage_path=storage_path, now=datetime(2026, 7, 6, 21, 0))
-            stored_total = get_session_sales(storage_path=storage_path, now=datetime(2026, 7, 6, 22, 0))
+            first_total = record_session_sale(
+                250.0, storage_path=storage_path, now=datetime(2026, 7, 6, 19, 0)
+            )
+            second_total = record_session_sale(
+                75.0, storage_path=storage_path, now=datetime(2026, 7, 6, 21, 0)
+            )
+            stored_total = get_session_sales(
+                storage_path=storage_path, now=datetime(2026, 7, 6, 22, 0)
+            )
 
             self.assertEqual(first_total, 250.0)
             self.assertEqual(second_total, 325.0)
@@ -156,22 +179,42 @@ class ReceiptFormattingTests(unittest.TestCase):
     def test_sales_report_summarizes_sessions(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_path = Path(temp_dir) / "session_sales.json"
-            record_session_order({"total": 250.0}, storage_path=storage_path, now=datetime(2026, 7, 6, 19, 0))
-            record_session_order({"total": 75.0}, storage_path=storage_path, now=datetime(2026, 7, 7, 19, 0))
+            record_session_order(
+                {"total": 250.0},
+                storage_path=storage_path,
+                now=datetime(2026, 7, 6, 19, 0),
+            )
+            record_session_order(
+                {"total": 75.0},
+                storage_path=storage_path,
+                now=datetime(2026, 7, 7, 19, 0),
+            )
 
             report = repository_get_sales_report(storage_path)
 
-            self.assertEqual([entry["session_id"] for entry in report], ["2026-07-07", "2026-07-06"])
+            self.assertEqual(
+                [entry["session_id"] for entry in report], ["2026-07-07", "2026-07-06"]
+            )
             self.assertEqual(report[0]["order_count"], 1)
             self.assertEqual(report[1]["total"], 250.0)
 
     def test_sales_report_filters_by_date(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_path = Path(temp_dir) / "session_sales.json"
-            record_session_order({"total": 250.0}, storage_path=storage_path, now=datetime(2026, 7, 6, 19, 0))
-            record_session_order({"total": 75.0}, storage_path=storage_path, now=datetime(2026, 7, 7, 19, 0))
+            record_session_order(
+                {"total": 250.0},
+                storage_path=storage_path,
+                now=datetime(2026, 7, 6, 19, 0),
+            )
+            record_session_order(
+                {"total": 75.0},
+                storage_path=storage_path,
+                now=datetime(2026, 7, 7, 19, 0),
+            )
 
-            report = repository_get_sales_report(storage_path, start_date="2026-07-07", end_date="2026-07-07")
+            report = repository_get_sales_report(
+                storage_path, start_date="2026-07-07", end_date="2026-07-07"
+            )
 
             self.assertEqual(len(report), 1)
             self.assertEqual(report[0]["session_id"], "2026-07-07")
@@ -180,7 +223,14 @@ class ReceiptFormattingTests(unittest.TestCase):
     def test_menu_items_are_persisted_to_a_json_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_path = Path(temp_dir) / "menu_items.json"
-            items = [{"category": "Test", "name": "Sample Item", "size": "Standard", "price": 150}]
+            items = [
+                {
+                    "category": "Test",
+                    "name": "Sample Item",
+                    "size": "Standard",
+                    "price": 150,
+                }
+            ]
 
             save_menu_items(items, storage_path=storage_path)
             loaded_items = load_menu_items(storage_path=storage_path)
@@ -190,8 +240,22 @@ class ReceiptFormattingTests(unittest.TestCase):
     def test_loading_defaults_preserves_saved_price(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_path = Path(temp_dir) / "menu_items.json"
-            items = [{"category": "Test", "name": "Sample Item", "size": "Standard", "price": 175}]
-            defaults = [{"category": "Test", "name": "Sample Item", "size": "Standard", "price": 150}]
+            items = [
+                {
+                    "category": "Test",
+                    "name": "Sample Item",
+                    "size": "Standard",
+                    "price": 175,
+                }
+            ]
+            defaults = [
+                {
+                    "category": "Test",
+                    "name": "Sample Item",
+                    "size": "Standard",
+                    "price": 150,
+                }
+            ]
 
             save_menu_items(items, storage_path=storage_path)
             loaded_items = repository_load_menu_items(defaults, storage_path)
@@ -203,8 +267,19 @@ class ReceiptFormattingTests(unittest.TestCase):
             storage_path = Path(temp_dir) / "session_sales.json"
             now = datetime(2026, 7, 6, 19, 0)
 
-            record_session_order({"total": 250.0, "items": [{"name": "Burger", "qty": 1, "total": 250.0}]}, storage_path=storage_path, now=now)
-            record_session_order({"total": 75.0, "items": [{"name": "Tea", "qty": 1, "total": 75.0}]}, storage_path=storage_path, now=now)
+            record_session_order(
+                {
+                    "total": 250.0,
+                    "items": [{"name": "Burger", "qty": 1, "total": 250.0}],
+                },
+                storage_path=storage_path,
+                now=now,
+            )
+            record_session_order(
+                {"total": 75.0, "items": [{"name": "Tea", "qty": 1, "total": 75.0}]},
+                storage_path=storage_path,
+                now=now,
+            )
 
             deleted_total = delete_session_order(0, storage_path=storage_path, now=now)
             remaining_orders = get_session_orders(storage_path=storage_path, now=now)

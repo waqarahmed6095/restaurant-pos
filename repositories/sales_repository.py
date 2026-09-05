@@ -32,7 +32,9 @@ def _save_data(data: dict, storage_path: str | os.PathLike) -> None:
         json.dump(data, handle, indent=2)
 
 
-def get_session_sales(storage_path: str | os.PathLike, now: datetime | None = None) -> float:
+def get_session_sales(
+    storage_path: str | os.PathLike, now: datetime | None = None
+) -> float:
     session_id = get_session_id(now)
     if session_id is None:
         return 0.0
@@ -44,7 +46,9 @@ def get_session_sales(storage_path: str | os.PathLike, now: datetime | None = No
     return 0.0
 
 
-def get_session_orders(storage_path: str | os.PathLike, now: datetime | None = None) -> list:
+def get_session_orders(
+    storage_path: str | os.PathLike, now: datetime | None = None
+) -> list:
     session_id = get_session_id(now)
     if session_id is None:
         return []
@@ -78,7 +82,9 @@ def get_sales_report(
             order_count = len(orders) if isinstance(orders, list) else 0
         else:
             continue
-        report.append({"session_id": session_id, "order_count": order_count, "total": total})
+        report.append(
+            {"session_id": session_id, "order_count": order_count, "total": total}
+        )
     return sorted(report, key=lambda entry: entry["session_id"], reverse=True)
 
 
@@ -101,7 +107,7 @@ def get_next_order_number(
         value = str(order.get("order_number", ""))
         if value.startswith(prefix):
             try:
-                highest = max(highest, int(value[len(prefix):]))
+                highest = max(highest, int(value[len(prefix) :]))
             except ValueError:
                 continue
     return f"{prefix}{highest + 1:03d}"
@@ -126,26 +132,40 @@ def record_session_order(
 
     order_copy = dict(order)
     order_copy.setdefault("timestamp", (now or datetime.now()).isoformat())
-    order_copy.setdefault("order_number", get_next_order_number(storage_path, now, replace_index))
+    order_copy.setdefault(
+        "order_number", get_next_order_number(storage_path, now, replace_index)
+    )
     orders = existing.setdefault("orders", [])
     if replace_index is not None and 0 <= replace_index < len(orders):
-        previous_total = float(orders[replace_index].get("total", orders[replace_index].get("amount", 0.0)))
+        previous_total = float(
+            orders[replace_index].get("total", orders[replace_index].get("amount", 0.0))
+        )
         orders[replace_index] = order_copy
-        existing["total"] = float(existing.get("total", 0.0)) - previous_total + float(order_copy.get("total", order_copy.get("amount", 0.0)))
+        existing["total"] = (
+            float(existing.get("total", 0.0))
+            - previous_total
+            + float(order_copy.get("total", order_copy.get("amount", 0.0)))
+        )
     else:
         orders.append(order_copy)
-        existing["total"] = float(existing.get("total", 0.0)) + float(order_copy.get("total", order_copy.get("amount", 0.0)))
+        existing["total"] = float(existing.get("total", 0.0)) + float(
+            order_copy.get("total", order_copy.get("amount", 0.0))
+        )
 
     data[session_id] = existing
     _save_data(data, storage_path)
     return float(existing["total"])
 
 
-def record_session_sale(amount: float, storage_path: str | os.PathLike, now: datetime | None = None) -> float:
+def record_session_sale(
+    amount: float, storage_path: str | os.PathLike, now: datetime | None = None
+) -> float:
     return record_session_order({"total": float(amount)}, storage_path, now)
 
 
-def delete_session_order(index: int, storage_path: str | os.PathLike, now: datetime | None = None) -> float:
+def delete_session_order(
+    index: int, storage_path: str | os.PathLike, now: datetime | None = None
+) -> float:
     session_id = get_session_id(now)
     if session_id is None:
         return 0.0
@@ -160,7 +180,9 @@ def delete_session_order(index: int, storage_path: str | os.PathLike, now: datet
 
     orders.pop(index)
     existing["orders"] = orders
-    existing["total"] = sum(float(order.get("total", order.get("amount", 0.0))) for order in orders)
+    existing["total"] = sum(
+        float(order.get("total", order.get("amount", 0.0))) for order in orders
+    )
     data[session_id] = existing
     _save_data(data, storage_path)
     return float(existing["total"])

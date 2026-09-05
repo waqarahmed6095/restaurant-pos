@@ -32,9 +32,7 @@ def load_menu_items(
                 data = json.load(handle)
             if isinstance(data, list):
                 stored_items = [
-                    normalize_menu_item(item)
-                    for item in data
-                    if isinstance(item, dict)
+                    normalize_menu_item(item) for item in data if isinstance(item, dict)
                 ]
                 if not include_defaults:
                     return stored_items
@@ -42,9 +40,15 @@ def load_menu_items(
                     (item["category"], item["name"], item["size"]): item
                     for item in stored_items
                 }
-                normalized_defaults = [normalize_menu_item(item) for item in default_items]
+                normalized_defaults = [
+                    normalize_menu_item(item) for item in default_items
+                ]
                 for default_item in normalized_defaults:
-                    key = (default_item["category"], default_item["name"], default_item["size"])
+                    key = (
+                        default_item["category"],
+                        default_item["name"],
+                        default_item["size"],
+                    )
                     if key not in stored_by_key:
                         stored_items.append(default_item)
                 save_menu_items(stored_items, target_path)

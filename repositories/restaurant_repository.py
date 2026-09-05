@@ -2,7 +2,6 @@ import json
 import os
 from pathlib import Path
 
-
 DEFAULT_RESTAURANT = {
     "name": "",
     "address": "",
@@ -28,8 +27,12 @@ def load_restaurant(storage_path: str | os.PathLike) -> dict:
             restaurant = DEFAULT_RESTAURANT.copy()
             restaurant.update(data)
             restaurant["service_charge"] = float(restaurant.get("service_charge", 0.0))
-            restaurant["indoor_tables"] = max(0, int(restaurant.get("indoor_tables", 10)))
-            restaurant["outdoor_tables"] = max(0, int(restaurant.get("outdoor_tables", 25)))
+            restaurant["indoor_tables"] = max(
+                0, int(restaurant.get("indoor_tables", 10))
+            )
+            restaurant["outdoor_tables"] = max(
+                0, int(restaurant.get("outdoor_tables", 25))
+            )
             return restaurant
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         pass

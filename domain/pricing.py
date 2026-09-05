@@ -1,6 +1,5 @@
 from collections.abc import Iterable
 
-
 DEFAULT_SERVICE_CHARGE = 30.0
 
 

@@ -50,7 +50,11 @@ def build_receipt_text(
         qty = str(item["quantity"]).rjust(3)
         unit_price = f"{item['unit_price']:.2f}".rjust(10)
         total = f"{item['total_price']:.2f}".rjust(10)
-        lines.append(f"{item_name_lines[0]:<16}{size:<8}{qty:>3}{unit_price:>10}{total:>10}"[:width])
+        lines.append(
+            f"{item_name_lines[0]:<16}{size:<8}{qty:>3}{unit_price:>10}{total:>10}"[
+                :width
+            ]
+        )
         for continuation in item_name_lines[1:]:
             lines.append(f"{continuation:<16}{'':<8}{'':>3}{'':>10}{'':>10}"[:width])
         lines.append("-" * width)
@@ -60,13 +64,17 @@ def build_receipt_text(
     if include_service_charge and order_items:
         lines.append(f"{'Subtotal:':<16}{format_currency(subtotal):>10}")
         lines.append(f"{'Service Charge:':<16}{format_currency(service_charge):>10}")
-    total = subtotal + (service_charge if include_service_charge and order_items else 0.0)
-    lines.extend([
-        f"{'TOTAL:':<16}{format_currency(total):>10}",
-        "=" * width,
-        f"Thank you for dining at {restaurant_name}!",
-        "",
-    ])
+    total = subtotal + (
+        service_charge if include_service_charge and order_items else 0.0
+    )
+    lines.extend(
+        [
+            f"{'TOTAL:':<16}{format_currency(total):>10}",
+            "=" * width,
+            f"Thank you for dining at {restaurant_name}!",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

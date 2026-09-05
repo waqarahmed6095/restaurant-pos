@@ -1,6 +1,6 @@
-import customtkinter as ctk
 from tkinter import ttk
 
+import customtkinter as ctk
 
 COLORS = {
     "canvas": "#F5F1EA",

@@ -1,4 +1,3 @@
-
 import csv
 import hashlib
 import hmac
@@ -6,49 +5,56 @@ import json
 import os
 import re
 import tempfile
-
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
-import customtkinter as ctk
 from datetime import datetime
 from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from domain.pricing import (
-    calculate_order_total,
-    get_categories as get_menu_categories,
-    get_items_for_category as get_menu_items_for_category,
-    get_price_for_item as get_menu_price,
-    get_sizes_for_item as get_menu_sizes_for_item,
-)
-from repositories.menu_repository import (
-    load_menu_items as repository_load_menu_items,
-    normalize_menu_item as repository_normalize_menu_item,
-    save_menu_items as repository_save_menu_items,
-)
-from repositories.sales_repository import (
-    delete_session_order as repository_delete_session_order,
-    get_session_id as repository_get_session_id,
-    get_session_orders as repository_get_session_orders,
-    get_sales_report as repository_get_sales_report,
-    get_next_order_number as repository_get_next_order_number,
-    get_session_sales as repository_get_session_sales,
-    record_session_order as repository_record_session_order,
-    record_session_sale as repository_record_session_sale,
-)
-from repositories.restaurant_repository import (
-    load_restaurant as repository_load_restaurant,
-    save_restaurant as repository_save_restaurant,
-)
-from services.receipt_service import (
-    build_kitchen_slip_text as service_build_kitchen_slip_text,
-    build_receipt_text as service_build_receipt_text,
-    format_currency as service_format_currency,
-)
+import customtkinter as ctk
+
+from domain.pricing import calculate_order_total
+from domain.pricing import get_categories as get_menu_categories
+from domain.pricing import \
+    get_items_for_category as get_menu_items_for_category
+from domain.pricing import get_price_for_item as get_menu_price
+from domain.pricing import get_sizes_for_item as get_menu_sizes_for_item
+from repositories.menu_repository import \
+    load_menu_items as repository_load_menu_items
+from repositories.menu_repository import \
+    normalize_menu_item as repository_normalize_menu_item
+from repositories.menu_repository import \
+    save_menu_items as repository_save_menu_items
+from repositories.restaurant_repository import \
+    load_restaurant as repository_load_restaurant
+from repositories.restaurant_repository import \
+    save_restaurant as repository_save_restaurant
+from repositories.sales_repository import \
+    delete_session_order as repository_delete_session_order
+from repositories.sales_repository import \
+    get_next_order_number as repository_get_next_order_number
+from repositories.sales_repository import \
+    get_sales_report as repository_get_sales_report
+from repositories.sales_repository import \
+    get_session_id as repository_get_session_id
+from repositories.sales_repository import \
+    get_session_orders as repository_get_session_orders
+from repositories.sales_repository import \
+    get_session_sales as repository_get_session_sales
+from repositories.sales_repository import \
+    record_session_order as repository_record_session_order
+from repositories.sales_repository import \
+    record_session_sale as repository_record_session_sale
+from services.receipt_service import \
+    build_kitchen_slip_text as service_build_kitchen_slip_text
+from services.receipt_service import \
+    build_receipt_text as service_build_receipt_text
+from services.receipt_service import format_currency as service_format_currency
 from ui.theme import configure_theme
 
 try:
     from escpos.printer import Win32Raw
+
     ESC_POS_AVAILABLE = True
 except Exception:
     Win32Raw = None
@@ -56,6 +62,7 @@ except Exception:
 
 try:
     from PIL import Image, ImageTk
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -94,10 +101,14 @@ def normalize_menu_item(item: dict) -> dict:
 
 def load_menu_items(storage_path: str | os.PathLike | None = None) -> list[dict]:
     target_path = storage_path or MENU_ITEMS_PATH
-    return repository_load_menu_items(MENU_ITEMS, target_path, include_defaults=storage_path is None)
+    return repository_load_menu_items(
+        MENU_ITEMS, target_path, include_defaults=storage_path is None
+    )
 
 
-def save_menu_items(items: list[dict], storage_path: str | os.PathLike | None = None) -> None:
+def save_menu_items(
+    items: list[dict], storage_path: str | os.PathLike | None = None
+) -> None:
     repository_save_menu_items(items, storage_path or MENU_ITEMS_PATH)
 
 
@@ -138,22 +149,34 @@ def build_kitchen_slip_text(
     table_number: str,
     order_number: str | None = None,
 ) -> str:
-    return service_build_kitchen_slip_text(order_items, table_type, table_number, order_number=order_number)
+    return service_build_kitchen_slip_text(
+        order_items, table_type, table_number, order_number=order_number
+    )
 
 
 def get_session_id(now: datetime | None = None) -> str | None:
     return repository_get_session_id(now)
 
 
-def get_session_sales(storage_path: str | os.PathLike | None = None, now: datetime | None = None) -> float:
+def get_session_sales(
+    storage_path: str | os.PathLike | None = None, now: datetime | None = None
+) -> float:
     return repository_get_session_sales(storage_path or SESSION_SALES_PATH, now)
 
 
-def record_session_sale(amount: float, storage_path: str | os.PathLike | None = None, now: datetime | None = None) -> float:
-    return repository_record_session_sale(amount, storage_path or SESSION_SALES_PATH, now)
+def record_session_sale(
+    amount: float,
+    storage_path: str | os.PathLike | None = None,
+    now: datetime | None = None,
+) -> float:
+    return repository_record_session_sale(
+        amount, storage_path or SESSION_SALES_PATH, now
+    )
 
 
-def get_session_orders(storage_path: str | os.PathLike | None = None, now: datetime | None = None) -> list:
+def get_session_orders(
+    storage_path: str | os.PathLike | None = None, now: datetime | None = None
+) -> list:
     return repository_get_session_orders(storage_path or SESSION_SALES_PATH, now)
 
 
@@ -162,19 +185,36 @@ def get_sales_report(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> list[dict]:
-    return repository_get_sales_report(storage_path or SESSION_SALES_PATH, start_date, end_date)
+    return repository_get_sales_report(
+        storage_path or SESSION_SALES_PATH, start_date, end_date
+    )
 
 
-def get_next_order_number(now: datetime | None = None, replace_index: int | None = None) -> str:
+def get_next_order_number(
+    now: datetime | None = None, replace_index: int | None = None
+) -> str:
     return repository_get_next_order_number(SESSION_SALES_PATH, now, replace_index)
 
 
-def record_session_order(order: dict, storage_path: str | os.PathLike | None = None, now: datetime | None = None, replace_index: int | None = None) -> float:
-    return repository_record_session_order(order, storage_path or SESSION_SALES_PATH, now, replace_index)
+def record_session_order(
+    order: dict,
+    storage_path: str | os.PathLike | None = None,
+    now: datetime | None = None,
+    replace_index: int | None = None,
+) -> float:
+    return repository_record_session_order(
+        order, storage_path or SESSION_SALES_PATH, now, replace_index
+    )
 
 
-def delete_session_order(index: int, storage_path: str | os.PathLike | None = None, now: datetime | None = None) -> float:
-    return repository_delete_session_order(index, storage_path or SESSION_SALES_PATH, now)
+def delete_session_order(
+    index: int,
+    storage_path: str | os.PathLike | None = None,
+    now: datetime | None = None,
+) -> float:
+    return repository_delete_session_order(
+        index, storage_path or SESSION_SALES_PATH, now
+    )
 
 
 def hash_pin(pin: str) -> str:
@@ -225,7 +265,9 @@ class RestaurantPOS(ctk.CTk):
         self.order_items = []
         self.editing_session_order_index = None
         self.categories = get_categories()
-        self.selected_category = tk.StringVar(value=self.categories[0] if self.categories else "")
+        self.selected_category = tk.StringVar(
+            value=self.categories[0] if self.categories else ""
+        )
         self.selected_item = tk.StringVar()
         self.selected_size = tk.StringVar()
         self.quantity = tk.IntVar(value=1)
@@ -266,7 +308,9 @@ class RestaurantPOS(ctk.CTk):
         setup_window.grid_columnconfigure(1, weight=2)
         setup_window.grid_rowconfigure(0, weight=1)
 
-        welcome_panel = ctk.CTkFrame(setup_window, fg_color=colors["brand"], corner_radius=0)
+        welcome_panel = ctk.CTkFrame(
+            setup_window, fg_color=colors["brand"], corner_radius=0
+        )
         welcome_panel.grid(row=0, column=0, sticky="nsew")
         ctk.CTkLabel(
             welcome_panel,
@@ -290,7 +334,9 @@ class RestaurantPOS(ctk.CTk):
             justify="left",
         ).pack(anchor="w", padx=34, pady=(260, 0))
 
-        form_panel = ctk.CTkFrame(setup_window, fg_color=colors["panel"], corner_radius=0)
+        form_panel = ctk.CTkFrame(
+            setup_window, fg_color=colors["panel"], corner_radius=0
+        )
         form_panel.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
         form_panel.grid_columnconfigure(0, weight=1)
         form_panel.grid_columnconfigure(1, weight=1)
@@ -313,7 +359,14 @@ class RestaurantPOS(ctk.CTk):
                 text=label.upper(),
                 text_color=colors["muted"],
                 font=("Segoe UI", 9, "bold"),
-            ).grid(row=row, column=column, columnspan=columnspan, sticky="w", padx=(34 if column == 0 else 10, 10), pady=(0, 5))
+            ).grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                sticky="w",
+                padx=(34 if column == 0 else 10, 10),
+                pady=(0, 5),
+            )
             entry = ctk.CTkEntry(
                 form_panel,
                 textvariable=values[key],
@@ -323,7 +376,14 @@ class RestaurantPOS(ctk.CTk):
                 fg_color=colors["canvas"],
                 text_color=colors["ink"],
             )
-            entry.grid(row=row + 1, column=column, columnspan=columnspan, sticky="ew", padx=(34 if column == 0 else 10, 10), pady=(0, 8))
+            entry.grid(
+                row=row + 1,
+                column=column,
+                columnspan=columnspan,
+                sticky="ew",
+                padx=(34 if column == 0 else 10, 10),
+                pady=(0, 8),
+            )
             return entry
 
         add_field(2, "Restaurant name", "name", columnspan=2)
@@ -338,7 +398,10 @@ class RestaurantPOS(ctk.CTk):
             elif key == "app_icon_path":
                 filetypes = [("Windows icon", "*.ico")]
             else:
-                filetypes = [("Image files", "*.png *.jpg *.jpeg"), ("All files", "*.*")]
+                filetypes = [
+                    ("Image files", "*.png *.jpg *.jpeg"),
+                    ("All files", "*.*"),
+                ]
             selected = filedialog.askopenfilename(
                 parent=setup_window,
                 title=f"Choose {key.replace('_', ' ')}",
@@ -350,7 +413,9 @@ class RestaurantPOS(ctk.CTk):
                     self.apply_window_icon(selected)
 
         asset_fields = ctk.CTkFrame(form_panel, fg_color="transparent")
-        asset_fields.grid(row=10, column=0, columnspan=2, sticky="ew", padx=34, pady=(0, 8))
+        asset_fields.grid(
+            row=10, column=0, columnspan=2, sticky="ew", padx=34, pady=(0, 8)
+        )
         asset_fields.grid_columnconfigure(0, weight=1)
         asset_fields.grid_columnconfigure(1, weight=1)
         asset_fields.grid_columnconfigure(2, weight=1)
@@ -360,9 +425,17 @@ class RestaurantPOS(ctk.CTk):
                 text=key.replace("_", " ").upper(),
                 text_color=colors["muted"],
                 font=("Segoe UI", 9, "bold"),
-            ).grid(row=0, column=column, sticky="w", padx=(0 if column == 0 else 10, 10), pady=(0, 5))
+            ).grid(
+                row=0,
+                column=column,
+                sticky="w",
+                padx=(0 if column == 0 else 10, 10),
+                pady=(0, 5),
+            )
             asset_row = ctk.CTkFrame(asset_fields, fg_color="transparent")
-            asset_row.grid(row=1, column=column, sticky="ew", padx=(0 if column == 0 else 10, 10))
+            asset_row.grid(
+                row=1, column=column, sticky="ew", padx=(0 if column == 0 else 10, 10)
+            )
             asset_row.grid_columnconfigure(0, weight=1)
             ctk.CTkEntry(
                 asset_row,
@@ -454,43 +527,87 @@ class RestaurantPOS(ctk.CTk):
             phone = values["phone"].get().strip()
             email = values["email"].get().strip()
             if not name:
-                messagebox.showerror("Restaurant setup", "Restaurant name is required.", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Restaurant name is required.",
+                    parent=setup_window,
+                )
                 return
             if len(name) > 100:
-                messagebox.showerror("Restaurant setup", "Restaurant name must be 100 characters or fewer.", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Restaurant name must be 100 characters or fewer.",
+                    parent=setup_window,
+                )
                 return
             if not address:
-                messagebox.showerror("Restaurant setup", "Address is required.", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup", "Address is required.", parent=setup_window
+                )
                 return
             if len(address) > 200:
-                messagebox.showerror("Restaurant setup", "Address must be 200 characters or fewer.", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Address must be 200 characters or fewer.",
+                    parent=setup_window,
+                )
                 return
             if not phone or not re.fullmatch(r"[+()\d][\d\s().-]{6,19}", phone):
-                messagebox.showerror("Restaurant setup", "Enter a valid phone number.", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Enter a valid phone number.",
+                    parent=setup_window,
+                )
                 return
             if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
-                messagebox.showerror("Restaurant setup", "Enter a valid email address.", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Enter a valid email address.",
+                    parent=setup_window,
+                )
                 return
             try:
                 service_charge = max(0.0, float(values["service_charge"].get() or 0))
                 indoor_tables = max(0, int(values["indoor_tables"].get() or 0))
                 outdoor_tables = max(0, int(values["outdoor_tables"].get() or 0))
-                if service_charge > 1_000_000 or indoor_tables > 500 or outdoor_tables > 500:
+                if (
+                    service_charge > 1_000_000
+                    or indoor_tables > 500
+                    or outdoor_tables > 500
+                ):
                     raise ValueError
             except ValueError:
-                messagebox.showerror("Restaurant setup", "Use valid non-negative values (table counts up to 500).", parent=setup_window)
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Use valid non-negative values (table counts up to 500).",
+                    parent=setup_window,
+                )
                 return
             for key, label, extensions in (
                 ("logo_path", "Logo", {".png", ".jpg", ".jpeg"}),
                 ("footer_path", "Footer image", {".png", ".jpg", ".jpeg"}),
             ):
                 image_path = values[key].get().strip()
-                if image_path and (not Path(image_path).is_file() or Path(image_path).suffix.lower() not in extensions):
-                    messagebox.showerror("Restaurant setup", f"Choose a valid {label.lower()} file.", parent=setup_window)
+                if image_path and (
+                    not Path(image_path).is_file()
+                    or Path(image_path).suffix.lower() not in extensions
+                ):
+                    messagebox.showerror(
+                        "Restaurant setup",
+                        f"Choose a valid {label.lower()} file.",
+                        parent=setup_window,
+                    )
                     return
             icon_path = values["app_icon_path"].get().strip()
-            if icon_path and (not Path(icon_path).is_file() or Path(icon_path).suffix.lower() != ".ico"):
-                messagebox.showerror("Restaurant setup", "Choose a valid Windows .ico app icon.", parent=setup_window)
+            if icon_path and (
+                not Path(icon_path).is_file()
+                or Path(icon_path).suffix.lower() != ".ico"
+            ):
+                messagebox.showerror(
+                    "Restaurant setup",
+                    "Choose a valid Windows .ico app icon.",
+                    parent=setup_window,
+                )
                 return
             menu_path = values["menu_path"].get().strip()
             imported_items = None
@@ -500,23 +617,44 @@ class RestaurantPOS(ctk.CTk):
                     if not menu_file.is_file() or menu_file.suffix.lower() != ".json":
                         raise ValueError
                     menu_data = json.loads(menu_file.read_text(encoding="utf-8"))
-                    if not isinstance(menu_data, list) or not all(isinstance(item, dict) for item in menu_data):
+                    if not isinstance(menu_data, list) or not all(
+                        isinstance(item, dict) for item in menu_data
+                    ):
                         raise ValueError
                     imported_items = []
                     for item in menu_data:
-                        if not all(str(item.get(key, "")).strip() for key in ("category", "name", "size")):
+                        if not all(
+                            str(item.get(key, "")).strip()
+                            for key in ("category", "name", "size")
+                        ):
                             raise ValueError
                         price = float(item.get("price"))
                         if price < 0:
                             raise ValueError
                         imported_items.append(normalize_menu_item(item))
-                except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
-                    messagebox.showerror("Restaurant setup", "Choose a valid menu JSON file with category, name, size, and non-negative price for every item.", parent=setup_window)
+                except (
+                    OSError,
+                    UnicodeError,
+                    json.JSONDecodeError,
+                    TypeError,
+                    ValueError,
+                ):
+                    messagebox.showerror(
+                        "Restaurant setup",
+                        "Choose a valid menu JSON file with category, name, size, and non-negative price for every item.",
+                        parent=setup_window,
+                    )
                     return
             restaurant = {
                 key: value.get().strip()
                 for key, value in values.items()
-                if key not in {"service_charge", "indoor_tables", "outdoor_tables", "menu_path"}
+                if key
+                not in {
+                    "service_charge",
+                    "indoor_tables",
+                    "outdoor_tables",
+                    "menu_path",
+                }
             }
             restaurant["service_charge"] = service_charge
             restaurant["indoor_tables"] = indoor_tables
@@ -546,29 +684,55 @@ class RestaurantPOS(ctk.CTk):
         self.lift()
         self.focus_force()
         if PIN_PATH.exists():
-            pin = simpledialog.askstring("Staff login", "Enter PIN:", parent=self, show="*")
+            pin = simpledialog.askstring(
+                "Staff login", "Enter PIN:", parent=self, show="*"
+            )
             if not pin or not verify_pin(pin):
                 messagebox.showerror("Staff login", "Incorrect PIN.")
                 return False
         else:
-            pin = simpledialog.askstring("Create PIN", "Create a PIN for this app:", parent=self, show="*")
-            confirmation = simpledialog.askstring("Create PIN", "Confirm your PIN:", parent=self, show="*")
-            if not pin or not pin.isdigit() or pin != confirmation or not 4 <= len(pin) <= 12:
-                messagebox.showerror("Create PIN", "PINs must match and contain 4-12 digits.")
+            pin = simpledialog.askstring(
+                "Create PIN", "Create a PIN for this app:", parent=self, show="*"
+            )
+            confirmation = simpledialog.askstring(
+                "Create PIN", "Confirm your PIN:", parent=self, show="*"
+            )
+            if (
+                not pin
+                or not pin.isdigit()
+                or pin != confirmation
+                or not 4 <= len(pin) <= 12
+            ):
+                messagebox.showerror(
+                    "Create PIN", "PINs must match and contain 4-12 digits."
+                )
                 return False
             save_pin(pin)
         return True
 
     def change_pin(self):
-        current_pin = simpledialog.askstring("Change PIN", "Enter current PIN:", parent=self, show="*")
+        current_pin = simpledialog.askstring(
+            "Change PIN", "Enter current PIN:", parent=self, show="*"
+        )
         if not current_pin or not verify_pin(current_pin):
             messagebox.showerror("Change PIN", "Current PIN is incorrect.", parent=self)
             return
 
-        new_pin = simpledialog.askstring("Change PIN", "Enter new PIN (4-12 digits):", parent=self, show="*")
-        confirmation = simpledialog.askstring("Change PIN", "Confirm new PIN:", parent=self, show="*")
-        if not new_pin or not new_pin.isdigit() or not 4 <= len(new_pin) <= 12 or new_pin != confirmation:
-            messagebox.showerror("Change PIN", "PINs must match and contain 4-12 digits.", parent=self)
+        new_pin = simpledialog.askstring(
+            "Change PIN", "Enter new PIN (4-12 digits):", parent=self, show="*"
+        )
+        confirmation = simpledialog.askstring(
+            "Change PIN", "Confirm new PIN:", parent=self, show="*"
+        )
+        if (
+            not new_pin
+            or not new_pin.isdigit()
+            or not 4 <= len(new_pin) <= 12
+            or new_pin != confirmation
+        ):
+            messagebox.showerror(
+                "Change PIN", "PINs must match and contain 4-12 digits.", parent=self
+            )
             return
 
         save_pin(new_pin)
@@ -598,66 +762,211 @@ class RestaurantPOS(ctk.CTk):
         self.rowconfigure(2, weight=2)
 
         top_frame = ctk.CTkFrame(self, fg_color=colors["panel"], corner_radius=14)
-        top_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=18, pady=(16, 8))
+        top_frame.grid(
+            row=0, column=0, columnspan=3, sticky="ew", padx=18, pady=(16, 8)
+        )
         top_frame.columnconfigure(1, weight=1)
         if self.logo_image:
-            ctk.CTkLabel(top_frame, image=self.logo_image, text="").grid(row=0, column=0, padx=(18, 8), pady=10)
+            ctk.CTkLabel(top_frame, image=self.logo_image, text="").grid(
+                row=0, column=0, padx=(18, 8), pady=10
+            )
         header_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
         header_frame.grid(row=0, column=1, sticky="ew", padx=8)
-        ctk.CTkLabel(header_frame, text=RESTAURANT["name"].upper(), text_color=colors["brand"], font=("Segoe UI", 24, "bold")).pack(anchor="w")
-        ctk.CTkLabel(header_frame, text=f'Order desk  /  {RESTAURANT["address"]}', text_color=colors["muted"], font=("Segoe UI", 12)).pack(anchor="w", pady=(2, 0))
-        ctk.CTkLabel(top_frame, text="LIVE SERVICE", text_color=colors["brand"], fg_color=colors["soft"], corner_radius=8, padx=12, pady=6, font=("Segoe UI", 10, "bold")).grid(row=0, column=2, padx=18)
+        ctk.CTkLabel(
+            header_frame,
+            text=RESTAURANT["name"].upper(),
+            text_color=colors["brand"],
+            font=("Segoe UI", 24, "bold"),
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            header_frame,
+            text=f'Order desk  /  {RESTAURANT["address"]}',
+            text_color=colors["muted"],
+            font=("Segoe UI", 12),
+        ).pack(anchor="w", pady=(2, 0))
+        ctk.CTkLabel(
+            top_frame,
+            text="LIVE SERVICE",
+            text_color=colors["brand"],
+            fg_color=colors["soft"],
+            corner_radius=8,
+            padx=12,
+            pady=6,
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=0, column=2, padx=18)
 
         item_frame = ctk.CTkFrame(self, fg_color=colors["panel"], corner_radius=14)
         item_frame.grid(row=1, column=0, sticky="nsew", padx=(18, 8), pady=(8, 10))
         item_frame.columnconfigure(0, weight=1)
-        ctk.CTkLabel(item_frame, text="Build an order", text_color=colors["ink"], font=("Segoe UI", 20, "bold")).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 2))
-        ctk.CTkLabel(item_frame, text="Choose a category, item, size, and quantity.", text_color=colors["muted"], font=("Segoe UI", 11)).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
+        ctk.CTkLabel(
+            item_frame,
+            text="Build an order",
+            text_color=colors["ink"],
+            font=("Segoe UI", 20, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 2))
+        ctk.CTkLabel(
+            item_frame,
+            text="Choose a category, item, size, and quantity.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 11),
+        ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
         form_frame = ctk.CTkFrame(item_frame, fg_color=colors["soft"], corner_radius=10)
         form_frame.grid(row=2, column=0, sticky="ew", padx=14, pady=2)
         form_frame.columnconfigure(0, weight=1)
-        ctk.CTkLabel(form_frame, text="CATEGORY", text_color=colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
-        self.category_menu = ttk.Combobox(form_frame, textvariable=self.selected_category, values=self.categories, state="readonly", style="Modern.TCombobox")
+        ctk.CTkLabel(
+            form_frame,
+            text="CATEGORY",
+            text_color=colors["muted"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
+        self.category_menu = ttk.Combobox(
+            form_frame,
+            textvariable=self.selected_category,
+            values=self.categories,
+            state="readonly",
+            style="Modern.TCombobox",
+        )
         self.category_menu.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="ew")
-        ctk.CTkLabel(form_frame, text="MENU ITEM", text_color=colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w", padx=12, pady=(4, 4))
-        self.item_menu = ttk.Combobox(form_frame, textvariable=self.selected_item, state="readonly", style="Modern.TCombobox")
+        ctk.CTkLabel(
+            form_frame,
+            text="MENU ITEM",
+            text_color=colors["muted"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=2, column=0, sticky="w", padx=12, pady=(4, 4))
+        self.item_menu = ttk.Combobox(
+            form_frame,
+            textvariable=self.selected_item,
+            state="readonly",
+            style="Modern.TCombobox",
+        )
         self.item_menu.grid(row=3, column=0, padx=12, pady=(0, 10), sticky="ew")
         self.category_menu.bind("<<ComboboxSelected>>", self.update_items)
-        ctk.CTkLabel(form_frame, text="SIZE", text_color=colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=4, column=0, sticky="w", padx=12, pady=(4, 4))
-        self.size_menu = ttk.Combobox(form_frame, textvariable=self.selected_size, state="readonly", style="Modern.TCombobox")
+        ctk.CTkLabel(
+            form_frame,
+            text="SIZE",
+            text_color=colors["muted"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=4, column=0, sticky="w", padx=12, pady=(4, 4))
+        self.size_menu = ttk.Combobox(
+            form_frame,
+            textvariable=self.selected_size,
+            state="readonly",
+            style="Modern.TCombobox",
+        )
         self.size_menu.grid(row=5, column=0, padx=12, pady=(0, 10), sticky="ew")
         self.item_menu.bind("<<ComboboxSelected>>", self.update_sizes)
 
-        self.price_label = ctk.CTkLabel(form_frame, text="Unit price: Rs 0.00", text_color=colors["brand"], font=("Segoe UI", 13, "bold"))
+        self.price_label = ctk.CTkLabel(
+            form_frame,
+            text="Unit price: Rs 0.00",
+            text_color=colors["brand"],
+            font=("Segoe UI", 13, "bold"),
+        )
         self.price_label.grid(row=6, column=0, pady=(2, 12))
         self.update_items()
         self.size_menu.bind("<<ComboboxSelected>>", lambda event: self.update_price())
         quantity_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
         quantity_frame.grid(row=3, column=0, sticky="ew", padx=18, pady=(16, 8))
-        ctk.CTkLabel(quantity_frame, text="Quantity", text_color=colors["ink"], font=("Segoe UI", 11, "bold")).pack(side="left")
-        quantity_stepper = ctk.CTkFrame(quantity_frame, fg_color=colors["soft"], corner_radius=8, height=38)
+        ctk.CTkLabel(
+            quantity_frame,
+            text="Quantity",
+            text_color=colors["ink"],
+            font=("Segoe UI", 11, "bold"),
+        ).pack(side="left")
+        quantity_stepper = ctk.CTkFrame(
+            quantity_frame, fg_color=colors["soft"], corner_radius=8, height=38
+        )
         quantity_stepper.pack(side="right")
         quantity_stepper.pack_propagate(False)
-        ctk.CTkButton(quantity_stepper, text="-", command=lambda: self.change_quantity(-1), width=38, height=38, corner_radius=7, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 16, "bold")).pack(side="left")
-        ctk.CTkEntry(quantity_stepper, textvariable=self.quantity, width=44, height=38, justify="center", border_width=0, fg_color=colors["soft"], text_color=colors["ink"], font=("Segoe UI", 12, "bold")).pack(side="left", padx=2)
-        ctk.CTkButton(quantity_stepper, text="+", command=lambda: self.change_quantity(1), width=38, height=38, corner_radius=7, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 16, "bold")).pack(side="left")
-        ctk.CTkButton(item_frame, text="+  ADD TO ORDER", command=self.add_item_to_order, height=46, corner_radius=9, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 12, "bold")).grid(row=4, column=0, sticky="ew", padx=18, pady=(4, 18))
+        ctk.CTkButton(
+            quantity_stepper,
+            text="-",
+            command=lambda: self.change_quantity(-1),
+            width=38,
+            height=38,
+            corner_radius=7,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 16, "bold"),
+        ).pack(side="left")
+        ctk.CTkEntry(
+            quantity_stepper,
+            textvariable=self.quantity,
+            width=44,
+            height=38,
+            justify="center",
+            border_width=0,
+            fg_color=colors["soft"],
+            text_color=colors["ink"],
+            font=("Segoe UI", 12, "bold"),
+        ).pack(side="left", padx=2)
+        ctk.CTkButton(
+            quantity_stepper,
+            text="+",
+            command=lambda: self.change_quantity(1),
+            width=38,
+            height=38,
+            corner_radius=7,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 16, "bold"),
+        ).pack(side="left")
+        ctk.CTkButton(
+            item_frame,
+            text="+  ADD TO ORDER",
+            command=self.add_item_to_order,
+            height=46,
+            corner_radius=9,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 12, "bold"),
+        ).grid(row=4, column=0, sticky="ew", padx=18, pady=(4, 18))
 
         middle_container = ctk.CTkFrame(self, fg_color="transparent")
-        middle_container.grid(row=1, column=1, rowspan=2, sticky="nsew", padx=(10, 4), pady=(8, 18))
+        middle_container.grid(
+            row=1, column=1, rowspan=2, sticky="nsew", padx=(10, 4), pady=(8, 18)
+        )
         middle_container.columnconfigure(0, weight=1)
         middle_container.rowconfigure(1, weight=1)
 
-        table_frame = ctk.CTkFrame(item_frame, fg_color=colors["panel"], corner_radius=14)
+        table_frame = ctk.CTkFrame(
+            item_frame, fg_color=colors["panel"], corner_radius=14
+        )
         table_frame.grid(row=6, column=0, sticky="ew", padx=14, pady=(0, 8))
         table_frame.columnconfigure(1, weight=1)
-        ctk.CTkLabel(table_frame, text="Order destination", text_color=colors["ink"], font=("Segoe UI", 17, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(10, 4))
-        ctk.CTkLabel(table_frame, text="TYPE", text_color=colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=1, column=0, sticky="w", padx=16, pady=3)
-        self.table_type_menu = ttk.Combobox(table_frame, textvariable=self.table_type, values=["Indoor", "Outdoor", "Home Delivery"], state="readonly", style="Modern.TCombobox")
+        ctk.CTkLabel(
+            table_frame,
+            text="Order destination",
+            text_color=colors["ink"],
+            font=("Segoe UI", 17, "bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(10, 4))
+        ctk.CTkLabel(
+            table_frame,
+            text="TYPE",
+            text_color=colors["muted"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=3)
+        self.table_type_menu = ttk.Combobox(
+            table_frame,
+            textvariable=self.table_type,
+            values=["Indoor", "Outdoor", "Home Delivery"],
+            state="readonly",
+            style="Modern.TCombobox",
+        )
         self.table_type_menu.grid(row=1, column=1, padx=(0, 16), pady=3, sticky="ew")
         self.table_type_menu.bind("<<ComboboxSelected>>", self.update_table_numbers)
-        ctk.CTkLabel(table_frame, text="TABLE", text_color=colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w", padx=16, pady=3)
-        self.table_number_menu = ttk.Combobox(table_frame, textvariable=self.table_number, state="readonly", style="Modern.TCombobox")
+        ctk.CTkLabel(
+            table_frame,
+            text="TABLE",
+            text_color=colors["muted"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=2, column=0, sticky="w", padx=16, pady=3)
+        self.table_number_menu = ttk.Combobox(
+            table_frame,
+            textvariable=self.table_number,
+            state="readonly",
+            style="Modern.TCombobox",
+        )
         self.table_number_menu.grid(row=2, column=1, padx=(0, 16), pady=3, sticky="ew")
         self.service_charge_check = ctk.CTkCheckBox(
             table_frame,
@@ -668,25 +977,86 @@ class RestaurantPOS(ctk.CTk):
             fg_color=colors["brand"],
             hover_color=colors["brand_dark"],
         )
-        self.service_charge_check.grid(row=3, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 8))
+        self.service_charge_check.grid(
+            row=3, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 8)
+        )
         self.update_table_numbers()
 
-        summary_frame = ctk.CTkFrame(middle_container, fg_color=colors["brand"], corner_radius=14)
+        summary_frame = ctk.CTkFrame(
+            middle_container, fg_color=colors["brand"], corner_radius=14
+        )
         summary_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        ctk.CTkLabel(summary_frame, text="CURRENT TOTAL", text_color="#F4DCE0", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=20, pady=(20, 2))
-        self.total_label = ctk.CTkLabel(summary_frame, text="Total: Rs 0.00", text_color="white", font=("Segoe UI", 28, "bold"))
+        ctk.CTkLabel(
+            summary_frame,
+            text="CURRENT TOTAL",
+            text_color="#F4DCE0",
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", padx=20, pady=(20, 2))
+        self.total_label = ctk.CTkLabel(
+            summary_frame,
+            text="Total: Rs 0.00",
+            text_color="white",
+            font=("Segoe UI", 28, "bold"),
+        )
         self.total_label.pack(anchor="w", padx=20, pady=(0, 18))
-        ctk.CTkButton(summary_frame, text="View session sales", command=self.display_session_sales, height=38, fg_color="#A94353", hover_color=colors["brand_dark"], anchor="w").pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(summary_frame, text="Sales report", command=self.display_sales_report, height=38, fg_color="#A94353", hover_color=colors["brand_dark"], anchor="w").pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(summary_frame, text="Change PIN", command=self.change_pin, height=38, fg_color="#A94353", hover_color=colors["brand_dark"], anchor="w").pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(middle_container, text="Manage menu", command=self.open_menu_manager, height=38, fg_color=colors["brand"], hover_color=colors["brand_dark"], text_color="white", font=("Segoe UI", 11, "bold")).grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        ctk.CTkButton(
+            summary_frame,
+            text="View session sales",
+            command=self.display_session_sales,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            summary_frame,
+            text="Sales report",
+            command=self.display_sales_report,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            summary_frame,
+            text="Change PIN",
+            command=self.change_pin,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            middle_container,
+            text="Manage menu",
+            command=self.open_menu_manager,
+            height=38,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            text_color="white",
+            font=("Segoe UI", 11, "bold"),
+        ).grid(row=3, column=0, sticky="ew", pady=(10, 0))
 
         orders_panel = ctk.CTkFrame(self, fg_color=colors["panel"], corner_radius=14)
-        orders_panel.grid(row=1, column=2, rowspan=2, sticky="nsew", padx=(4, 18), pady=(8, 18))
+        orders_panel.grid(
+            row=1, column=2, rowspan=2, sticky="nsew", padx=(4, 18), pady=(8, 18)
+        )
 
-        ctk.CTkLabel(orders_panel, text="Session orders", text_color=colors["ink"], font=("Segoe UI", 19, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(16, 2))
-        self.session_summary_label = ctk.CTkLabel(orders_panel, text="0 tickets  ·  Rs 0.00", text_color=colors["brand"], font=("Segoe UI", 11, "bold"))
-        self.session_summary_label.grid(row=1, column=0, columnspan=2, sticky="w", padx=16, pady=(0, 10))
+        ctk.CTkLabel(
+            orders_panel,
+            text="Session orders",
+            text_color=colors["ink"],
+            font=("Segoe UI", 19, "bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(16, 2))
+        self.session_summary_label = ctk.CTkLabel(
+            orders_panel,
+            text="0 tickets  ·  Rs 0.00",
+            text_color=colors["brand"],
+            font=("Segoe UI", 11, "bold"),
+        )
+        self.session_summary_label.grid(
+            row=1, column=0, columnspan=2, sticky="w", padx=16, pady=(0, 10)
+        )
         orders_panel.columnconfigure(0, weight=1)
         orders_panel.rowconfigure(2, weight=3)
         orders_panel.rowconfigure(3, weight=2)
@@ -702,21 +1072,51 @@ class RestaurantPOS(ctk.CTk):
         self.session_orders_listbox.heading("items", text="Items")
         self.session_orders_listbox.heading("total", text="Total")
         self.session_orders_listbox.column("order", width=92, anchor="w", stretch=False)
-        self.session_orders_listbox.column("time", width=70, anchor="center", stretch=False)
+        self.session_orders_listbox.column(
+            "time", width=70, anchor="center", stretch=False
+        )
         self.session_orders_listbox.column("items", width=130, anchor="w")
         self.session_orders_listbox.column("total", width=92, anchor="e", stretch=False)
-        self.session_orders_listbox.grid(row=2, column=0, sticky="nsew", padx=(12, 0), pady=6)
-        orders_scrollbar = ttk.Scrollbar(orders_panel, orient="vertical", command=self.session_orders_listbox.yview)
+        self.session_orders_listbox.grid(
+            row=2, column=0, sticky="nsew", padx=(12, 0), pady=6
+        )
+        orders_scrollbar = ttk.Scrollbar(
+            orders_panel, orient="vertical", command=self.session_orders_listbox.yview
+        )
         orders_scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 10), pady=6)
-        detail_frame = ctk.CTkFrame(orders_panel, fg_color=colors["soft"], corner_radius=8)
-        detail_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=12, pady=(4, 12))
+        detail_frame = ctk.CTkFrame(
+            orders_panel, fg_color=colors["soft"], corner_radius=8
+        )
+        detail_frame.grid(
+            row=3, column=0, columnspan=2, sticky="nsew", padx=12, pady=(4, 12)
+        )
         detail_frame.columnconfigure(0, weight=1)
         detail_frame.rowconfigure(2, weight=1)
-        self.order_detail_header = ctk.CTkLabel(detail_frame, text="Select an order", text_color=colors["ink"], font=("Segoe UI", 13, "bold"), anchor="w")
-        self.order_detail_header.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 0))
-        self.order_detail_meta = ctk.CTkLabel(detail_frame, text="", text_color=colors["muted"], font=("Segoe UI", 10), anchor="w")
+        self.order_detail_header = ctk.CTkLabel(
+            detail_frame,
+            text="Select an order",
+            text_color=colors["ink"],
+            font=("Segoe UI", 13, "bold"),
+            anchor="w",
+        )
+        self.order_detail_header.grid(
+            row=0, column=0, sticky="ew", padx=12, pady=(10, 0)
+        )
+        self.order_detail_meta = ctk.CTkLabel(
+            detail_frame,
+            text="",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+            anchor="w",
+        )
         self.order_detail_meta.grid(row=1, column=0, sticky="ew", padx=12, pady=(1, 5))
-        self.order_detail_tree = ttk.Treeview(detail_frame, columns=("item", "size", "qty", "total"), show="headings", height=3, style="Modern.Treeview")
+        self.order_detail_tree = ttk.Treeview(
+            detail_frame,
+            columns=("item", "size", "qty", "total"),
+            show="headings",
+            height=3,
+            style="Modern.Treeview",
+        )
         self.order_detail_tree.heading("item", text="Item")
         self.order_detail_tree.heading("size", text="Size")
         self.order_detail_tree.heading("qty", text="Qty")
@@ -726,24 +1126,47 @@ class RestaurantPOS(ctk.CTk):
         self.order_detail_tree.column("qty", anchor="center", width=45, stretch=False)
         self.order_detail_tree.column("total", anchor="e", width=78, stretch=False)
         self.order_detail_tree.grid(row=2, column=0, sticky="nsew", padx=8, pady=(0, 8))
-        detail_scrollbar = ttk.Scrollbar(detail_frame, orient="vertical", command=self.order_detail_tree.yview)
+        detail_scrollbar = ttk.Scrollbar(
+            detail_frame, orient="vertical", command=self.order_detail_tree.yview
+        )
         detail_scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 8), pady=(0, 8))
         self.order_detail_tree.configure(yscrollcommand=detail_scrollbar.set)
         self.session_orders_listbox.configure(yscrollcommand=orders_scrollbar.set)
-        self.session_orders_listbox.bind("<<TreeviewSelect>>", lambda e: self.show_selected_order_details())
-        self.session_orders_listbox.bind("<Button-3>", self.show_session_order_context_menu)
+        self.session_orders_listbox.bind(
+            "<<TreeviewSelect>>", lambda e: self.show_selected_order_details()
+        )
+        self.session_orders_listbox.bind(
+            "<Button-3>", self.show_session_order_context_menu
+        )
 
         self.session_order_context_menu = tk.Menu(self, tearoff=0)
-        self.session_order_context_menu.add_command(label="Edit Order", command=self.edit_selected_session_order)
-        self.session_order_context_menu.add_command(label="Delete Order", command=self.delete_selected_session_order)
+        self.session_order_context_menu.add_command(
+            label="Edit Order", command=self.edit_selected_session_order
+        )
+        self.session_order_context_menu.add_command(
+            label="Delete Order", command=self.delete_selected_session_order
+        )
 
-        order_frame = ctk.CTkFrame(middle_container, fg_color=colors["panel"], corner_radius=14)
+        order_frame = ctk.CTkFrame(
+            middle_container, fg_color=colors["panel"], corner_radius=14
+        )
         order_frame.grid(row=1, column=0, sticky="nsew")
         order_frame.columnconfigure(0, weight=1)
         order_frame.rowconfigure(0, weight=0)
         order_frame.rowconfigure(1, weight=1)
-        ctk.CTkLabel(order_frame, text="Current order", text_color=colors["ink"], font=("Segoe UI", 16, "bold")).grid(row=0, column=0, sticky="nw", padx=16, pady=(14, 0))
-        self.order_tree = ttk.Treeview(order_frame, columns=("item", "size", "price", "quantity", "total"), show="headings", height=5, style="Modern.Treeview")
+        ctk.CTkLabel(
+            order_frame,
+            text="Current order",
+            text_color=colors["ink"],
+            font=("Segoe UI", 16, "bold"),
+        ).grid(row=0, column=0, sticky="nw", padx=16, pady=(14, 0))
+        self.order_tree = ttk.Treeview(
+            order_frame,
+            columns=("item", "size", "price", "quantity", "total"),
+            show="headings",
+            height=5,
+            style="Modern.Treeview",
+        )
         self.order_tree.heading("item", text="Item")
         self.order_tree.heading("size", text="Size")
         self.order_tree.heading("price", text="Unit Price")
@@ -756,15 +1179,43 @@ class RestaurantPOS(ctk.CTk):
         self.order_tree.column("total", width=90, anchor="center")
         self.order_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(4, 6))
 
-        scrollbar = ttk.Scrollbar(order_frame, orient="vertical", command=self.order_tree.yview)
+        scrollbar = ttk.Scrollbar(
+            order_frame, orient="vertical", command=self.order_tree.yview
+        )
         self.order_tree.configure(yscroll=scrollbar.set)
         scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(4, 6))
         action_frame = ctk.CTkFrame(order_frame, fg_color="transparent")
-        action_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        action_frame.grid(
+            row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12)
+        )
         action_frame.columnconfigure((0, 1, 2), weight=1)
-        ctk.CTkButton(action_frame, text="Remove selected", command=self.remove_selected_item, height=36, fg_color=colors["soft"], hover_color=colors["line"], text_color=colors["ink"]).grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkButton(action_frame, text="Clear order", command=self.clear_order, height=36, fg_color=colors["soft"], hover_color=colors["line"], text_color=colors["ink"]).grid(row=0, column=1, sticky="ew", padx=5)
-        ctk.CTkButton(action_frame, text="PRINT RECEIPT  ->", command=self.print_slip, height=36, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 11, "bold")).grid(row=0, column=2, sticky="ew", padx=(5, 0))
+        ctk.CTkButton(
+            action_frame,
+            text="Remove selected",
+            command=self.remove_selected_item,
+            height=36,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        ctk.CTkButton(
+            action_frame,
+            text="Clear order",
+            command=self.clear_order,
+            height=36,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+        ).grid(row=0, column=1, sticky="ew", padx=5)
+        ctk.CTkButton(
+            action_frame,
+            text="PRINT RECEIPT  ->",
+            command=self.print_slip,
+            height=36,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 11, "bold"),
+        ).grid(row=0, column=2, sticky="ew", padx=(5, 0))
 
     def load_logo_image(self):
         logo_path = RESTAURANT["logo_path"]
@@ -772,7 +1223,14 @@ class RestaurantPOS(ctk.CTk):
             return None
         try:
             img = Image.open(logo_path)
-            img.thumbnail((110, 78), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
+            img.thumbnail(
+                (110, 78),
+                (
+                    Image.Resampling.LANCZOS
+                    if hasattr(Image, "Resampling")
+                    else Image.ANTIALIAS
+                ),
+            )
             return ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
         except Exception:
             return None
@@ -795,7 +1253,14 @@ class RestaurantPOS(ctk.CTk):
             return None
         try:
             img = Image.open(logo_path).convert("RGBA")
-            img.thumbnail((64, 64), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
+            img.thumbnail(
+                (64, 64),
+                (
+                    Image.Resampling.LANCZOS
+                    if hasattr(Image, "Resampling")
+                    else Image.ANTIALIAS
+                ),
+            )
             return ImageTk.PhotoImage(img, master=self)
         except Exception:
             return None
@@ -860,25 +1325,62 @@ class RestaurantPOS(ctk.CTk):
         menu_window.columnconfigure(0, weight=1)
         menu_window.rowconfigure(2, weight=1)
 
-        header_frame = ctk.CTkFrame(menu_window, fg_color=colors["panel"], corner_radius=12)
+        header_frame = ctk.CTkFrame(
+            menu_window, fg_color=colors["panel"], corner_radius=12
+        )
         header_frame.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 8))
-        ctk.CTkLabel(header_frame, text="Menu manager", text_color=colors["ink"], font=("Segoe UI", 21, "bold")).pack(anchor="w", padx=18, pady=(14, 0))
-        ctk.CTkLabel(header_frame, text="Add new dishes or update pricing without leaving the order desk.", text_color=colors["muted"], font=("Segoe UI", 11)).pack(anchor="w", padx=18, pady=(2, 14))
+        ctk.CTkLabel(
+            header_frame,
+            text="Menu manager",
+            text_color=colors["ink"],
+            font=("Segoe UI", 21, "bold"),
+        ).pack(anchor="w", padx=18, pady=(14, 0))
+        ctk.CTkLabel(
+            header_frame,
+            text="Add new dishes or update pricing without leaving the order desk.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 11),
+        ).pack(anchor="w", padx=18, pady=(2, 14))
 
-        form_frame = ctk.CTkFrame(menu_window, fg_color=colors["panel"], corner_radius=12)
+        form_frame = ctk.CTkFrame(
+            menu_window, fg_color=colors["panel"], corner_radius=12
+        )
         form_frame.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
         form_frame.columnconfigure(1, weight=1)
-        ctk.CTkLabel(form_frame, text="ITEM DETAILS", text_color=colors["brand"], font=("Segoe UI", 10, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 8))
+        ctk.CTkLabel(
+            form_frame,
+            text="ITEM DETAILS",
+            text_color=colors["brand"],
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 8))
 
         self.menu_manager_name = tk.StringVar()
         self.menu_manager_category = tk.StringVar()
         self.menu_manager_size = tk.StringVar()
         self.menu_manager_price = tk.StringVar()
 
-        ctk.CTkLabel(form_frame, text="Name", text_color=colors["muted"], font=("Segoe UI", 10, "bold")).grid(row=1, column=0, sticky="w", padx=16, pady=5)
-        ctk.CTkEntry(form_frame, textvariable=self.menu_manager_name, height=36, border_width=1, border_color=colors["line"], fg_color=colors["canvas"], text_color=colors["ink"]).grid(row=1, column=1, sticky="ew", padx=(0, 16), pady=5)
+        ctk.CTkLabel(
+            form_frame,
+            text="Name",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=5)
+        ctk.CTkEntry(
+            form_frame,
+            textvariable=self.menu_manager_name,
+            height=36,
+            border_width=1,
+            border_color=colors["line"],
+            fg_color=colors["canvas"],
+            text_color=colors["ink"],
+        ).grid(row=1, column=1, sticky="ew", padx=(0, 16), pady=5)
 
-        ctk.CTkLabel(form_frame, text="Category", text_color=colors["muted"], font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="w", padx=16, pady=5)
+        ctk.CTkLabel(
+            form_frame,
+            text="Category",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=2, column=0, sticky="w", padx=16, pady=5)
         self.menu_manager_category_menu = ttk.Combobox(
             form_frame,
             textvariable=self.menu_manager_category,
@@ -886,10 +1388,19 @@ class RestaurantPOS(ctk.CTk):
             state="readonly",
             style="Modern.TCombobox",
         )
-        self.menu_manager_category_menu.grid(row=2, column=1, sticky="ew", padx=(0, 16), pady=5)
-        self.menu_manager_category_menu.bind("<<ComboboxSelected>>", self.handle_menu_manager_category)
+        self.menu_manager_category_menu.grid(
+            row=2, column=1, sticky="ew", padx=(0, 16), pady=5
+        )
+        self.menu_manager_category_menu.bind(
+            "<<ComboboxSelected>>", self.handle_menu_manager_category
+        )
 
-        ctk.CTkLabel(form_frame, text="Size", text_color=colors["muted"], font=("Segoe UI", 10, "bold")).grid(row=3, column=0, sticky="w", padx=16, pady=5)
+        ctk.CTkLabel(
+            form_frame,
+            text="Size",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=3, column=0, sticky="w", padx=16, pady=5)
         self.menu_manager_size_menu = ttk.Combobox(
             form_frame,
             textvariable=self.menu_manager_size,
@@ -897,23 +1408,65 @@ class RestaurantPOS(ctk.CTk):
             state="readonly",
             style="Modern.TCombobox",
         )
-        self.menu_manager_size_menu.grid(row=3, column=1, sticky="ew", padx=(0, 16), pady=5)
-        self.menu_manager_size_menu.bind("<<ComboboxSelected>>", self.handle_menu_manager_size)
+        self.menu_manager_size_menu.grid(
+            row=3, column=1, sticky="ew", padx=(0, 16), pady=5
+        )
+        self.menu_manager_size_menu.bind(
+            "<<ComboboxSelected>>", self.handle_menu_manager_size
+        )
 
-        ctk.CTkLabel(form_frame, text="Price (Rs)", text_color=colors["muted"], font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", padx=16, pady=5)
-        ctk.CTkEntry(form_frame, textvariable=self.menu_manager_price, height=36, border_width=1, border_color=colors["line"], fg_color=colors["canvas"], text_color=colors["ink"]).grid(row=4, column=1, sticky="ew", padx=(0, 16), pady=5)
+        ctk.CTkLabel(
+            form_frame,
+            text="Price (Rs)",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=4, column=0, sticky="w", padx=16, pady=5)
+        ctk.CTkEntry(
+            form_frame,
+            textvariable=self.menu_manager_price,
+            height=36,
+            border_width=1,
+            border_color=colors["line"],
+            fg_color=colors["canvas"],
+            text_color=colors["ink"],
+        ).grid(row=4, column=1, sticky="ew", padx=(0, 16), pady=5)
 
-        ctk.CTkButton(form_frame, text="+  ADD MENU ITEM", command=self.add_menu_item_from_window, height=38, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 11, "bold")).grid(row=5, column=0, columnspan=2, sticky="ew", padx=16, pady=(10, 16))
+        ctk.CTkButton(
+            form_frame,
+            text="+  ADD MENU ITEM",
+            command=self.add_menu_item_from_window,
+            height=38,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 11, "bold"),
+        ).grid(row=5, column=0, columnspan=2, sticky="ew", padx=16, pady=(10, 16))
 
-        tree_frame = ctk.CTkFrame(menu_window, fg_color=colors["panel"], corner_radius=12)
+        tree_frame = ctk.CTkFrame(
+            menu_window, fg_color=colors["panel"], corner_radius=12
+        )
         tree_frame.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 16))
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=0)
-        ctk.CTkLabel(tree_frame, text="Current menu", text_color=colors["ink"], font=("Segoe UI", 16, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 2))
-        ctk.CTkLabel(tree_frame, text="Select an item to load it into the form for editing.", text_color=colors["muted"], font=("Segoe UI", 10)).grid(row=1, column=0, columnspan=2, sticky="w", padx=16, pady=(0, 8))
+        ctk.CTkLabel(
+            tree_frame,
+            text="Current menu",
+            text_color=colors["ink"],
+            font=("Segoe UI", 16, "bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 2))
+        ctk.CTkLabel(
+            tree_frame,
+            text="Select an item to load it into the form for editing.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=16, pady=(0, 8))
         tree_frame.rowconfigure(2, weight=1)
 
-        self.menu_tree = ttk.Treeview(tree_frame, columns=("category", "name", "size", "price"), show="headings", height=14)
+        self.menu_tree = ttk.Treeview(
+            tree_frame,
+            columns=("category", "name", "size", "price"),
+            show="headings",
+            height=14,
+        )
         self.menu_tree.heading("category", text="Category")
         self.menu_tree.heading("name", text="Name")
         self.menu_tree.heading("size", text="Size")
@@ -924,20 +1477,43 @@ class RestaurantPOS(ctk.CTk):
         self.menu_tree.column("price", width=100, anchor="center")
         self.menu_tree.grid(row=2, column=0, sticky="nsew", padx=(12, 0), pady=8)
 
-        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.menu_tree.yview)
+        scrollbar = ttk.Scrollbar(
+            tree_frame, orient="vertical", command=self.menu_tree.yview
+        )
         scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 12), pady=8)
         self.menu_tree.configure(yscrollcommand=scrollbar.set)
 
         button_row = ttk.Frame(tree_frame)
-        button_row.grid(row=3, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 14))
+        button_row.grid(
+            row=3, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 14)
+        )
         button_row.columnconfigure(0, weight=1)
         button_row.columnconfigure(1, weight=1)
 
-        self.menu_tree.bind("<<TreeviewSelect>>", self.load_selected_menu_item_into_form)
+        self.menu_tree.bind(
+            "<<TreeviewSelect>>", self.load_selected_menu_item_into_form
+        )
 
-        edit_button = ctk.CTkButton(button_row, text="EDIT SELECTED", command=self.edit_selected_menu_item_from_window, height=38, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 11, "bold"))
+        edit_button = ctk.CTkButton(
+            button_row,
+            text="EDIT SELECTED",
+            command=self.edit_selected_menu_item_from_window,
+            height=38,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 11, "bold"),
+        )
         edit_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        remove_button = ctk.CTkButton(button_row, text="REMOVE SELECTED", command=self.remove_selected_menu_item_from_window, height=38, fg_color=colors["soft"], hover_color=colors["line"], text_color=colors["ink"], font=("Segoe UI", 11, "bold"))
+        remove_button = ctk.CTkButton(
+            button_row,
+            text="REMOVE SELECTED",
+            command=self.remove_selected_menu_item_from_window,
+            height=38,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+            font=("Segoe UI", 11, "bold"),
+        )
         remove_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         self.refresh_menu_manager_tree()
@@ -952,7 +1528,9 @@ class RestaurantPOS(ctk.CTk):
     def handle_menu_manager_category(self, *_):
         if self.menu_manager_category.get() != "Add new category...":
             return
-        category = simpledialog.askstring("New category", "Enter the new category name:", parent=self)
+        category = simpledialog.askstring(
+            "New category", "Enter the new category name:", parent=self
+        )
         if category and category.strip():
             category = category.strip()
             values = self.get_menu_manager_categories()
@@ -996,7 +1574,12 @@ class RestaurantPOS(ctk.CTk):
                 "",
                 "end",
                 iid=str(idx),
-                values=(item["category"], item["name"], item["size"], format_currency(item["price"])),
+                values=(
+                    item["category"],
+                    item["name"],
+                    item["size"],
+                    format_currency(item["price"]),
+                ),
             )
 
     def load_selected_menu_item_into_form(self, *_):
@@ -1020,12 +1603,16 @@ class RestaurantPOS(ctk.CTk):
         size = self.menu_manager_size.get().strip()
         price_text = self.menu_manager_price.get().strip()
         if not name or not category or not size or not price_text:
-            messagebox.showerror("Edit menu item", "Please fill in all menu item fields.")
+            messagebox.showerror(
+                "Edit menu item", "Please fill in all menu item fields."
+            )
             return
         try:
             price = float(price_text)
         except ValueError:
-            messagebox.showerror("Edit menu item", "Please enter a valid numeric price.")
+            messagebox.showerror(
+                "Edit menu item", "Please enter a valid numeric price."
+            )
             return
         if price < 0:
             messagebox.showerror("Edit menu item", "Price cannot be negative.")
@@ -1040,10 +1627,18 @@ class RestaurantPOS(ctk.CTk):
             for idx, item in enumerate(MENU_ITEMS)
         )
         if duplicate:
-            messagebox.showerror("Edit menu item", "Another menu item has the same category, name, and size.")
+            messagebox.showerror(
+                "Edit menu item",
+                "Another menu item has the same category, name, and size.",
+            )
             return
 
-        MENU_ITEMS[index] = {"category": category, "name": name, "size": size, "price": price}
+        MENU_ITEMS[index] = {
+            "category": category,
+            "name": name,
+            "size": size,
+            "price": price,
+        }
         save_menu_items(MENU_ITEMS)
         self.refresh_menu_controls()
         self.refresh_menu_manager_tree()
@@ -1056,7 +1651,9 @@ class RestaurantPOS(ctk.CTk):
         price_text = self.menu_manager_price.get().strip()
 
         if not name or not category or not size or not price_text:
-            messagebox.showerror("Add menu item", "Please fill in all menu item fields.")
+            messagebox.showerror(
+                "Add menu item", "Please fill in all menu item fields."
+            )
             return
 
         try:
@@ -1070,14 +1667,21 @@ class RestaurantPOS(ctk.CTk):
             return
 
         duplicate = any(
-            item["name"].lower() == name.lower() and item["category"].lower() == category.lower() and item["size"].lower() == size.lower()
+            item["name"].lower() == name.lower()
+            and item["category"].lower() == category.lower()
+            and item["size"].lower() == size.lower()
             for item in MENU_ITEMS
         )
         if duplicate:
-            if not messagebox.askyesno("Duplicate menu item", "A menu item with the same category, name, and size already exists. Add anyway?"):
+            if not messagebox.askyesno(
+                "Duplicate menu item",
+                "A menu item with the same category, name, and size already exists. Add anyway?",
+            ):
                 return
 
-        MENU_ITEMS.append({"category": category, "name": name, "size": size, "price": price})
+        MENU_ITEMS.append(
+            {"category": category, "name": name, "size": size, "price": price}
+        )
         save_menu_items(MENU_ITEMS)
         self.refresh_menu_controls()
         self.refresh_menu_manager_tree()
@@ -1092,12 +1696,17 @@ class RestaurantPOS(ctk.CTk):
             return
         selection = self.menu_tree.selection()
         if not selection:
-            messagebox.showinfo("Remove menu item", "Please select a menu item to remove.")
+            messagebox.showinfo(
+                "Remove menu item", "Please select a menu item to remove."
+            )
             return
 
         index = int(selection[0])
         item = MENU_ITEMS[index]
-        if not messagebox.askyesno("Remove menu item", f"Remove {item['name']} ({item['size']}) from {item['category']}?"):
+        if not messagebox.askyesno(
+            "Remove menu item",
+            f"Remove {item['name']} ({item['size']}) from {item['category']}?",
+        ):
             return
 
         MENU_ITEMS.pop(index)
@@ -1136,19 +1745,23 @@ class RestaurantPOS(ctk.CTk):
             messagebox.showinfo("Add item", "Please select a menu item and size first.")
             return
         if qty <= 0:
-            messagebox.showerror("Invalid quantity", "Please enter a quantity of 1 or more.")
+            messagebox.showerror(
+                "Invalid quantity", "Please enter a quantity of 1 or more."
+            )
             return
 
         price = get_price_for_item(item_name, size)
         total = price * qty
 
-        self.order_items.append({
-            "name": item_name,
-            "size": size,
-            "quantity": qty,
-            "unit_price": price,
-            "total_price": total,
-        })
+        self.order_items.append(
+            {
+                "name": item_name,
+                "size": size,
+                "quantity": qty,
+                "unit_price": price,
+                "total_price": total,
+            }
+        )
         self.refresh_order_view()
 
     def remove_selected_item(self):
@@ -1164,7 +1777,9 @@ class RestaurantPOS(ctk.CTk):
     def clear_order(self):
         if not self.order_items:
             return
-        if messagebox.askyesno("Clear order", "Are you sure you want to clear the entire order?"):
+        if messagebox.askyesno(
+            "Clear order", "Are you sure you want to clear the entire order?"
+        ):
             self.order_items.clear()
             self.refresh_order_view()
 
@@ -1188,17 +1803,27 @@ class RestaurantPOS(ctk.CTk):
                 session_total += total
                 order_number = str(order.get("order_number", f"#{idx + 1}"))
                 time_display = ts[11:16] if len(ts) >= 16 else "--:--"
-                item_names = ", ".join(
-                    f"{item.get('name', '')} x{item.get('qty', item.get('quantity', 1))}"
-                    for item in order.get("items", [])
-                ) or "Manual sale"
+                item_names = (
+                    ", ".join(
+                        f"{item.get('name', '')} x{item.get('qty', item.get('quantity', 1))}"
+                        for item in order.get("items", [])
+                    )
+                    or "Manual sale"
+                )
                 self.session_orders_listbox.insert(
                     "",
                     "end",
                     iid=str(idx),
-                    values=(order_number, time_display, item_names, format_currency(total)),
+                    values=(
+                        order_number,
+                        time_display,
+                        item_names,
+                        format_currency(total),
+                    ),
                 )
-            self.session_summary_label.configure(text=f"{len(orders)} tickets  ·  {format_currency(session_total)}")
+            self.session_summary_label.configure(
+                text=f"{len(orders)} tickets  ·  {format_currency(session_total)}"
+            )
             if orders:
                 last_item = self.session_orders_listbox.get_children()[-1]
                 self.session_orders_listbox.selection_set(last_item)
@@ -1208,7 +1833,9 @@ class RestaurantPOS(ctk.CTk):
 
     def display_session_sales(self):
         current_session_sales = get_session_sales(now=datetime.now())
-        messagebox.showinfo("Session Sales", f"Session Sales: {format_currency(current_session_sales)}")
+        messagebox.showinfo(
+            "Session Sales", f"Session Sales: {format_currency(current_session_sales)}"
+        )
 
     def display_sales_report(self):
         report_window = tk.Toplevel(self)
@@ -1224,21 +1851,48 @@ class RestaurantPOS(ctk.CTk):
         report_window.columnconfigure(0, weight=1)
         report_window.rowconfigure(2, weight=1)
 
-        header_frame = ctk.CTkFrame(report_window, fg_color=colors["panel"], corner_radius=12)
+        header_frame = ctk.CTkFrame(
+            report_window, fg_color=colors["panel"], corner_radius=12
+        )
         header_frame.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
-        ctk.CTkLabel(header_frame, text="Sales report", text_color=colors["ink"], font=("Segoe UI", 20, "bold")).pack(anchor="w", padx=16, pady=(12, 0))
-        ctk.CTkLabel(header_frame, text="Review session totals or filter by a date range.", text_color=colors["muted"], font=("Segoe UI", 10)).pack(anchor="w", padx=16, pady=(1, 12))
+        ctk.CTkLabel(
+            header_frame,
+            text="Sales report",
+            text_color=colors["ink"],
+            font=("Segoe UI", 20, "bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 0))
+        ctk.CTkLabel(
+            header_frame,
+            text="Review session totals or filter by a date range.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", padx=16, pady=(1, 12))
 
-        filter_frame = ctk.CTkFrame(report_window, fg_color=colors["panel"], corner_radius=10)
+        filter_frame = ctk.CTkFrame(
+            report_window, fg_color=colors["panel"], corner_radius=10
+        )
         filter_frame.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 8))
-        ttk.Label(filter_frame, text="From (YYYY-MM-DD)").pack(side="left", padx=(12, 4), pady=10)
+        ttk.Label(filter_frame, text="From (YYYY-MM-DD)").pack(
+            side="left", padx=(12, 4), pady=10
+        )
         start_var = tk.StringVar()
-        ttk.Entry(filter_frame, textvariable=start_var, width=14).pack(side="left", padx=(0, 8), pady=10)
-        ttk.Label(filter_frame, text="To (YYYY-MM-DD)").pack(side="left", padx=(0, 4), pady=10)
+        ttk.Entry(filter_frame, textvariable=start_var, width=14).pack(
+            side="left", padx=(0, 8), pady=10
+        )
+        ttk.Label(filter_frame, text="To (YYYY-MM-DD)").pack(
+            side="left", padx=(0, 4), pady=10
+        )
         end_var = tk.StringVar()
-        ttk.Entry(filter_frame, textvariable=end_var, width=14).pack(side="left", padx=(0, 8), pady=10)
+        ttk.Entry(filter_frame, textvariable=end_var, width=14).pack(
+            side="left", padx=(0, 8), pady=10
+        )
 
-        tree = ttk.Treeview(report_window, columns=("date", "orders", "total"), show="headings", style="Modern.Treeview")
+        tree = ttk.Treeview(
+            report_window,
+            columns=("date", "orders", "total"),
+            show="headings",
+            style="Modern.Treeview",
+        )
         tree.heading("date", text="Session date")
         tree.heading("orders", text="Orders")
         tree.heading("total", text="Total sales")
@@ -1246,11 +1900,21 @@ class RestaurantPOS(ctk.CTk):
         tree.column("orders", width=120, anchor="center")
         tree.column("total", width=180, anchor="e")
         tree.grid(row=2, column=0, sticky="nsew", padx=(16, 0), pady=(0, 6))
-        report_scrollbar = ttk.Scrollbar(report_window, orient="vertical", command=tree.yview)
+        report_scrollbar = ttk.Scrollbar(
+            report_window, orient="vertical", command=tree.yview
+        )
         report_scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 16), pady=(0, 6))
         tree.configure(yscrollcommand=report_scrollbar.set)
-        summary_label = ctk.CTkLabel(report_window, text="Grand total: Rs 0.00", text_color=colors["brand"], font=("Segoe UI", 14, "bold"), anchor="e")
-        summary_label.grid(row=3, column=0, columnspan=2, sticky="e", padx=16, pady=(2, 6))
+        summary_label = ctk.CTkLabel(
+            report_window,
+            text="Grand total: Rs 0.00",
+            text_color=colors["brand"],
+            font=("Segoe UI", 14, "bold"),
+            anchor="e",
+        )
+        summary_label.grid(
+            row=3, column=0, columnspan=2, sticky="e", padx=16, pady=(2, 6)
+        )
 
         def refresh_report():
             start_date = start_var.get().strip() or None
@@ -1262,7 +1926,11 @@ class RestaurantPOS(ctk.CTk):
                 if start_date and end_date and start_date > end_date:
                     raise ValueError
             except ValueError:
-                messagebox.showerror("Sales report", "Enter a valid date range in YYYY-MM-DD format.", parent=report_window)
+                messagebox.showerror(
+                    "Sales report",
+                    "Enter a valid date range in YYYY-MM-DD format.",
+                    parent=report_window,
+                )
                 return
 
             report = get_sales_report(start_date=start_date, end_date=end_date)
@@ -1271,9 +1939,19 @@ class RestaurantPOS(ctk.CTk):
             grand_total = 0.0
             for entry in report:
                 grand_total += entry["total"]
-                tree.insert("", "end", values=(entry["session_id"], entry["order_count"], format_currency(entry["total"])))
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        entry["session_id"],
+                        entry["order_count"],
+                        format_currency(entry["total"]),
+                    ),
+                )
             if not report:
-                tree.insert("", "end", values=("No sales recorded", "", format_currency(0.0)))
+                tree.insert(
+                    "", "end", values=("No sales recorded", "", format_currency(0.0))
+                )
             summary_label.configure(text=f"Grand total: {format_currency(grand_total)}")
 
         def export_report():
@@ -1291,15 +1969,43 @@ class RestaurantPOS(ctk.CTk):
             with open(target, "w", newline="", encoding="utf-8") as handle:
                 writer = csv.writer(handle)
                 writer.writerow(["Session date", "Orders", "Total sales"])
-                writer.writerows((entry["session_id"], entry["order_count"], entry["total"]) for entry in report)
-            messagebox.showinfo("Sales report", "Sales report exported successfully.", parent=report_window)
+                writer.writerows(
+                    (entry["session_id"], entry["order_count"], entry["total"])
+                    for entry in report
+                )
+            messagebox.showinfo(
+                "Sales report",
+                "Sales report exported successfully.",
+                parent=report_window,
+            )
 
         button_frame = ctk.CTkFrame(report_window, fg_color="transparent")
-        button_frame.grid(row=4, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 14))
-        export_button = ctk.CTkButton(button_frame, text="EXPORT CSV", command=export_report, width=110, height=34, fg_color=colors["soft"], hover_color=colors["line"], text_color=colors["ink"], font=("Segoe UI", 10, "bold"))
+        button_frame.grid(
+            row=4, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 14)
+        )
+        export_button = ctk.CTkButton(
+            button_frame,
+            text="EXPORT CSV",
+            command=export_report,
+            width=110,
+            height=34,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+            font=("Segoe UI", 10, "bold"),
+        )
         export_button.pack(side="left")
 
-        filter_button = ctk.CTkButton(filter_frame, text="FILTER", command=refresh_report, width=90, height=32, fg_color=colors["brand"], hover_color=colors["brand_dark"], font=("Segoe UI", 10, "bold"))
+        filter_button = ctk.CTkButton(
+            filter_frame,
+            text="FILTER",
+            command=refresh_report,
+            width=90,
+            height=32,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 10, "bold"),
+        )
         filter_button.pack(side="left", padx=(4, 12), pady=10)
 
         refresh_report()
@@ -1316,7 +2022,9 @@ class RestaurantPOS(ctk.CTk):
         self.show_selected_order_details()
         self.session_order_context_menu.tk_popup(event.x_root, event.y_root)
 
-    def load_session_order_into_current_order(self, order: dict, order_index: int | None = None) -> None:
+    def load_session_order_into_current_order(
+        self, order: dict, order_index: int | None = None
+    ) -> None:
         self.order_items = []
         for item in order.get("items", []) or []:
             quantity = item.get("quantity", item.get("qty", 1))
@@ -1331,13 +2039,15 @@ class RestaurantPOS(ctk.CTk):
                 item.get("total", item.get("amount", float(unit_price) * quantity)),
             )
 
-            self.order_items.append({
-                "name": item.get("name", ""),
-                "size": item.get("size", ""),
-                "quantity": quantity,
-                "unit_price": float(unit_price),
-                "total_price": float(total_price),
-            })
+            self.order_items.append(
+                {
+                    "name": item.get("name", ""),
+                    "size": item.get("size", ""),
+                    "quantity": quantity,
+                    "unit_price": float(unit_price),
+                    "total_price": float(total_price),
+                }
+            )
 
         self.editing_session_order_index = order_index
         self.refresh_order_view()
@@ -1366,7 +2076,9 @@ class RestaurantPOS(ctk.CTk):
             return
 
         order = orders[order_index]
-        if not messagebox.askyesno("Delete Order", f"Delete this order from {order.get('timestamp', '')}?"):
+        if not messagebox.askyesno(
+            "Delete Order", f"Delete this order from {order.get('timestamp', '')}?"
+        ):
             return
 
         delete_session_order(order_index, now=datetime.now())
@@ -1382,19 +2094,25 @@ class RestaurantPOS(ctk.CTk):
             if index < 0 or index >= len(orders):
                 return
             order = orders[index]
-            order_total = float(order.get('total', order.get('amount', 0.0)))
-            timestamp = order.get('timestamp', '')[:19].replace('T', ' ')
+            order_total = float(order.get("total", order.get("amount", 0.0)))
+            timestamp = order.get("timestamp", "")[:19].replace("T", " ")
             destination = f"{order.get('table_type', 'Indoor')} {order.get('table_number', '')}".rstrip()
-            self.order_detail_header.configure(text=f"{order.get('order_number', f'Order {index + 1}')}  ·  {format_currency(order_total)}")
+            self.order_detail_header.configure(
+                text=f"{order.get('order_number', f'Order {index + 1}')}  ·  {format_currency(order_total)}"
+            )
             self.order_detail_meta.configure(text=f"{timestamp}  ·  {destination}")
             for row in self.order_detail_tree.get_children():
                 self.order_detail_tree.delete(row)
-            for item in order.get('items', []):
-                name = item.get('name', '')
-                qty = item.get('qty', item.get('quantity', 1))
-                size = item.get('size', '')
-                total = item.get('total', item.get('total_price', item.get('amount', 0.0)))
-                self.order_detail_tree.insert("", "end", values=(name, size, qty, format_currency(float(total))))
+            for item in order.get("items", []):
+                name = item.get("name", "")
+                qty = item.get("qty", item.get("quantity", 1))
+                size = item.get("size", "")
+                total = item.get(
+                    "total", item.get("total_price", item.get("amount", 0.0))
+                )
+                self.order_detail_tree.insert(
+                    "", "end", values=(name, size, qty, format_currency(float(total)))
+                )
         except Exception:
             pass
 
@@ -1413,13 +2131,18 @@ class RestaurantPOS(ctk.CTk):
             self.order_tree.delete(row)
 
         for idx, item in enumerate(self.order_items):
-            self.order_tree.insert("", "end", iid=str(idx), values=(
-                item["name"],
-                item["size"],
-                format_currency(item["unit_price"]),
-                item["quantity"],
-                format_currency(item["total_price"]),
-            ))
+            self.order_tree.insert(
+                "",
+                "end",
+                iid=str(idx),
+                values=(
+                    item["name"],
+                    item["size"],
+                    format_currency(item["unit_price"]),
+                    item["quantity"],
+                    format_currency(item["total_price"]),
+                ),
+            )
 
         total_amount = self.get_current_order_total()
         self.total_label.configure(text=f"Total: {format_currency(total_amount)}")
@@ -1430,14 +2153,16 @@ class RestaurantPOS(ctk.CTk):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir = os.path.join(os.path.dirname(__file__), "Output")
         os.makedirs(output_dir, exist_ok=True)
-        
+
         file_path = os.path.join(output_dir, f"receipt_{timestamp}.txt")
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(text)
-        
+
         return file_path
 
-    def print_with_escpos(self, text: str, printer_name: str = "BlackCopper 80mm Series") -> tuple:
+    def print_with_escpos(
+        self, text: str, printer_name: str = "BlackCopper 80mm Series"
+    ) -> tuple:
         """
         Print to ESC/POS printer. If printer is unavailable, save to file instead.
         Returns: (success: bool, message: str, file_path: str or None)
@@ -1460,7 +2185,7 @@ class RestaurantPOS(ctk.CTk):
                     printer.set(align="left")
                     for line in text.splitlines():
                         printer.textln(line)
-                    
+
                     printer.cut()
                     return (True, "sent to printer", None)
                 finally:
@@ -1473,11 +2198,19 @@ class RestaurantPOS(ctk.CTk):
                 # Printer not available, fall back to file
                 print(f"Printer not available: {printer_error}")
                 file_path = self.print_to_file(text)
-                return (False, f"Printer unavailable, saved to file: {file_path}", file_path)
+                return (
+                    False,
+                    f"Printer unavailable, saved to file: {file_path}",
+                    file_path,
+                )
         else:
             # ESC/POS not available, save to file
             file_path = self.print_to_file(text)
-            return (False, f"ESC/POS not available, saved to file: {file_path}", file_path)
+            return (
+                False,
+                f"ESC/POS not available, saved to file: {file_path}",
+                file_path,
+            )
 
     def print_slip(self):
         if not self.order_items:
@@ -1502,9 +2235,13 @@ class RestaurantPOS(ctk.CTk):
             ],
         }
         replace_index = self.editing_session_order_index
-        order_number = get_next_order_number(now=datetime.now(), replace_index=replace_index)
+        order_number = get_next_order_number(
+            now=datetime.now(), replace_index=replace_index
+        )
         order_entry["order_number"] = order_number
-        record_session_order(order_entry, now=datetime.now(), replace_index=replace_index)
+        record_session_order(
+            order_entry, now=datetime.now(), replace_index=replace_index
+        )
         self.editing_session_order_index = None
         self.update_session_sales_label()
 
@@ -1527,23 +2264,25 @@ class RestaurantPOS(ctk.CTk):
         # Show both receipt and kitchen windows immediately
         self.show_receipt_window(receipt_text)
         self.show_kitchen_window(kitchen_text)
-        
+
         # Run printing in a separate thread to avoid freezing UI
         print_thread = threading.Thread(
-            target=self.do_print_slip,
-            args=(receipt_text, kitchen_text),
-            daemon=True
+            target=self.do_print_slip, args=(receipt_text, kitchen_text), daemon=True
         )
         print_thread.start()
 
     def do_print_slip(self, receipt_text: str, kitchen_text: str):
         """Background thread worker for printing receipts."""
         try:
-            receipt_temp = tempfile.NamedTemporaryFile("w", delete=False, suffix=".txt", encoding="utf-8")
+            receipt_temp = tempfile.NamedTemporaryFile(
+                "w", delete=False, suffix=".txt", encoding="utf-8"
+            )
             receipt_temp.write(receipt_text)
             receipt_temp.close()
 
-            kitchen_temp = tempfile.NamedTemporaryFile("w", delete=False, suffix="_kitchen.txt", encoding="utf-8")
+            kitchen_temp = tempfile.NamedTemporaryFile(
+                "w", delete=False, suffix="_kitchen.txt", encoding="utf-8"
+            )
             kitchen_temp.write(kitchen_text)
             kitchen_temp.close()
 
@@ -1552,21 +2291,29 @@ class RestaurantPOS(ctk.CTk):
 
             if os.name == "nt":
                 # Try to print with ESC/POS (will fall back to file if printer unavailable)
-                receipt_success, receipt_message, receipt_file = self.print_with_escpos(receipt_text)
-                kitchen_success, kitchen_message, kitchen_file = self.print_with_escpos(kitchen_text)
-                
+                receipt_success, receipt_message, receipt_file = self.print_with_escpos(
+                    receipt_text
+                )
+                kitchen_success, kitchen_message, kitchen_file = self.print_with_escpos(
+                    kitchen_text
+                )
+
                 if receipt_success and kitchen_success:
                     printer_message = "Receipts sent to printer successfully"
                 elif receipt_file and kitchen_file:
                     printer_message = f"Printer unavailable - saved to:\n  Receipt: {receipt_file}\n  Kitchen: {kitchen_file}"
                 else:
-                    printer_message = f"Receipt: {receipt_message}\nKitchen: {kitchen_message}"
+                    printer_message = (
+                        f"Receipt: {receipt_message}\nKitchen: {kitchen_message}"
+                    )
             else:
-                printer_message = f"Saved to {temp_receipt_filename} and {temp_kitchen_filename}"
-            
+                printer_message = (
+                    f"Saved to {temp_receipt_filename} and {temp_kitchen_filename}"
+                )
+
             # Show completion message in UI thread
             self.after(0, lambda: messagebox.showinfo("Print Status", printer_message))
-            
+
         except Exception as exc:
             error_message = f"Unable to print receipt: {exc}"
             self.after(0, lambda: messagebox.showerror("Print slip", error_message))
@@ -1583,7 +2330,14 @@ class RestaurantPOS(ctk.CTk):
         if PIL_AVAILABLE and logo_path and os.path.exists(logo_path):
             try:
                 img = Image.open(logo_path)
-                img.thumbnail((320, 120), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
+                img.thumbnail(
+                    (320, 120),
+                    (
+                        Image.Resampling.LANCZOS
+                        if hasattr(Image, "Resampling")
+                        else Image.ANTIALIAS
+                    ),
+                )
                 logo_image = ImageTk.PhotoImage(img)
                 logo_label = ttk.Label(receipt_window, image=logo_image)
                 logo_label.image = logo_image
@@ -1591,7 +2345,9 @@ class RestaurantPOS(ctk.CTk):
             except Exception:
                 pass
 
-        text_area = tk.Text(receipt_window, wrap="none", padx=0, pady=0, font=("Courier New", 6))
+        text_area = tk.Text(
+            receipt_window, wrap="none", padx=0, pady=0, font=("Courier New", 6)
+        )
         text_area.insert("0.0", receipt_text)
         text_area.config(state="disabled")
         text_area.pack(fill="both", expand=True)
@@ -1600,7 +2356,14 @@ class RestaurantPOS(ctk.CTk):
         if PIL_AVAILABLE and footer_path and os.path.exists(footer_path):
             try:
                 img = Image.open(footer_path)
-                img.thumbnail((320, 80), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
+                img.thumbnail(
+                    (320, 80),
+                    (
+                        Image.Resampling.LANCZOS
+                        if hasattr(Image, "Resampling")
+                        else Image.ANTIALIAS
+                    ),
+                )
                 footer_image = ImageTk.PhotoImage(img)
                 footer_label = ttk.Label(receipt_window, image=footer_image)
                 footer_label.image = footer_image
@@ -1608,7 +2371,9 @@ class RestaurantPOS(ctk.CTk):
             except Exception:
                 pass
 
-        ttk.Button(receipt_window, text="Close", command=receipt_window.destroy).pack(pady=10)
+        ttk.Button(receipt_window, text="Close", command=receipt_window.destroy).pack(
+            pady=10
+        )
 
     def show_kitchen_window(self, kitchen_text: str):
         """Display the kitchen slip in a separate window."""
@@ -1620,16 +2385,22 @@ class RestaurantPOS(ctk.CTk):
         )
 
         # Add a header to indicate this is for kitchen staff
-        header_label = ttk.Label(kitchen_window, text="KITCHEN SLIP", font=("Courier New", 10, "bold"))
+        header_label = ttk.Label(
+            kitchen_window, text="KITCHEN SLIP", font=("Courier New", 10, "bold")
+        )
         header_label.pack(pady=10)
 
-        text_area = tk.Text(kitchen_window, wrap="none", padx=10, pady=10, font=("Courier New", 8))
+        text_area = tk.Text(
+            kitchen_window, wrap="none", padx=10, pady=10, font=("Courier New", 8)
+        )
         text_area.insert("0.0", kitchen_text)
-        
+
         text_area.config(state="disabled")
         text_area.pack(fill="both", expand=True)
 
-        ttk.Button(kitchen_window, text="Close", command=kitchen_window.destroy).pack(pady=10)
+        ttk.Button(kitchen_window, text="Close", command=kitchen_window.destroy).pack(
+            pady=10
+        )
 
 
 def main():
