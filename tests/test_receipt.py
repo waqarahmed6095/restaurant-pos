@@ -4,19 +4,32 @@ from datetime import datetime
 from pathlib import Path
 
 from controllers.order_controller import OrderController
-from main import (BACKUP_FILES, build_closing_report_text,
-                  build_kitchen_slip_text, build_receipt_text, create_backup,
-                  delete_session_order, get_sales_analytics, get_session_id,
-                  get_session_orders, get_session_sales, hash_pin,
-                  load_menu_items, record_session_order, record_session_sale,
-                  restore_backup, save_menu_items, save_pin, verify_pin)
-from repositories.menu_repository import \
-    load_menu_items as repository_load_menu_items
+from main import (
+    BACKUP_FILES,
+    build_closing_report_text,
+    build_kitchen_slip_text,
+    build_receipt_text,
+    create_backup,
+    delete_session_order,
+    get_sales_analytics,
+    get_session_id,
+    get_session_orders,
+    get_session_sales,
+    hash_pin,
+    load_menu_items,
+    record_session_order,
+    record_session_sale,
+    restore_backup,
+    save_menu_items,
+    save_pin,
+    verify_pin,
+)
+from repositories.menu_repository import load_menu_items as repository_load_menu_items
 from repositories.restaurant_repository import load_restaurant, save_restaurant
-from repositories.sales_repository import \
-    get_sales_report as repository_get_sales_report
-from services.receipt_service import \
-    build_receipt_text as service_build_receipt_text
+from repositories.sales_repository import (
+    get_sales_report as repository_get_sales_report,
+)
+from services.receipt_service import build_receipt_text as service_build_receipt_text
 from services.validation import validate_contact, validate_image_path
 from ui.current_order_panel import CurrentOrderPanel
 from ui.order_entry_panel import OrderEntryPanel

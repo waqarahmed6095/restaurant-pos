@@ -16,62 +16,67 @@ from controllers.order_controller import OrderController
 from controllers.session_controller import SessionController
 from domain.order import deserialize_order_items, serialize_order_items
 from domain.pricing import get_categories as get_menu_categories
-from domain.pricing import \
-    get_items_for_category as get_menu_items_for_category
+from domain.pricing import get_items_for_category as get_menu_items_for_category
 from domain.pricing import get_price_for_item as get_menu_price
 from domain.pricing import get_sizes_for_item as get_menu_sizes_for_item
 from repositories.auth_repository import hash_pin as repository_hash_pin
 from repositories.auth_repository import save_pin as repository_save_pin
 from repositories.auth_repository import verify_pin as repository_verify_pin
-from repositories.backup_repository import \
-    create_backup as repository_create_backup
-from repositories.backup_repository import \
-    list_backups as repository_list_backups
-from repositories.backup_repository import \
-    restore_backup as repository_restore_backup
-from repositories.menu_repository import \
-    load_menu_items as repository_load_menu_items
-from repositories.menu_repository import \
-    normalize_menu_item as repository_normalize_menu_item
-from repositories.menu_repository import \
-    save_menu_items as repository_save_menu_items
-from repositories.restaurant_repository import \
-    load_restaurant as repository_load_restaurant
-from repositories.restaurant_repository import \
-    save_restaurant as repository_save_restaurant
-from repositories.sales_repository import \
-    delete_session_order as repository_delete_session_order
-from repositories.sales_repository import \
-    get_next_order_number as repository_get_next_order_number
-from repositories.sales_repository import \
-    get_sales_analytics as repository_get_sales_analytics
-from repositories.sales_repository import \
-    get_sales_report as repository_get_sales_report
-from repositories.sales_repository import \
-    get_session_id as repository_get_session_id
-from repositories.sales_repository import \
-    get_session_orders as repository_get_session_orders
-from repositories.sales_repository import \
-    get_session_sales as repository_get_session_sales
-from repositories.sales_repository import \
-    record_session_order as repository_record_session_order
-from repositories.sales_repository import \
-    record_session_sale as repository_record_session_sale
+from repositories.backup_repository import create_backup as repository_create_backup
+from repositories.backup_repository import list_backups as repository_list_backups
+from repositories.backup_repository import restore_backup as repository_restore_backup
+from repositories.menu_repository import load_menu_items as repository_load_menu_items
+from repositories.menu_repository import (
+    normalize_menu_item as repository_normalize_menu_item,
+)
+from repositories.menu_repository import save_menu_items as repository_save_menu_items
+from repositories.restaurant_repository import (
+    load_restaurant as repository_load_restaurant,
+)
+from repositories.restaurant_repository import (
+    save_restaurant as repository_save_restaurant,
+)
+from repositories.sales_repository import (
+    delete_session_order as repository_delete_session_order,
+)
+from repositories.sales_repository import (
+    get_next_order_number as repository_get_next_order_number,
+)
+from repositories.sales_repository import (
+    get_sales_analytics as repository_get_sales_analytics,
+)
+from repositories.sales_repository import (
+    get_sales_report as repository_get_sales_report,
+)
+from repositories.sales_repository import get_session_id as repository_get_session_id
+from repositories.sales_repository import (
+    get_session_orders as repository_get_session_orders,
+)
+from repositories.sales_repository import (
+    get_session_sales as repository_get_session_sales,
+)
+from repositories.sales_repository import (
+    record_session_order as repository_record_session_order,
+)
+from repositories.sales_repository import (
+    record_session_sale as repository_record_session_sale,
+)
 from services.logging_config import configure_logging
-from services.printing_service import \
-    get_default_printer as service_get_default_printer
-from services.printing_service import \
-    get_windows_printers as service_get_windows_printers
-from services.printing_service import \
-    print_with_escpos as service_print_with_escpos
-from services.printing_service import \
-    print_with_windows_spooler as service_print_with_windows_spooler
-from services.receipt_service import \
-    build_closing_report_text as service_build_closing_report_text
-from services.receipt_service import \
-    build_kitchen_slip_text as service_build_kitchen_slip_text
-from services.receipt_service import \
-    build_receipt_text as service_build_receipt_text
+from services.printing_service import get_default_printer as service_get_default_printer
+from services.printing_service import (
+    get_windows_printers as service_get_windows_printers,
+)
+from services.printing_service import print_with_escpos as service_print_with_escpos
+from services.printing_service import (
+    print_with_windows_spooler as service_print_with_windows_spooler,
+)
+from services.receipt_service import (
+    build_closing_report_text as service_build_closing_report_text,
+)
+from services.receipt_service import (
+    build_kitchen_slip_text as service_build_kitchen_slip_text,
+)
+from services.receipt_service import build_receipt_text as service_build_receipt_text
 from services.receipt_service import format_currency as service_format_currency
 from services.report_service import validate_date_range
 from services.validation import validate_contact, validate_image_path
@@ -80,8 +85,11 @@ from ui.dialogs import show_session_sales
 from ui.order_entry_panel import OrderEntryPanel
 from ui.pin_dialog import prompt_pin
 from ui.receipt_preview import load_preview_image
-from ui.report_dialogs import (open_closing_report, open_sales_analytics,
-                               open_sales_report)
+from ui.report_dialogs import (
+    open_closing_report,
+    open_sales_analytics,
+    open_sales_report,
+)
 from ui.session_orders_panel import SessionOrdersPanel
 from ui.summary_panel import SummaryPanel
 from ui.theme import configure_theme
