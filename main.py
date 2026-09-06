@@ -1,9 +1,6 @@
 import csv
-import hashlib
-import hmac
 import json
 import os
-import re
 import shutil
 import sys
 import threading
@@ -14,12 +11,25 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import customtkinter as ctk
 
-from domain.pricing import calculate_order_total
+from app_context import AppContext
+from controllers.order_controller import OrderController
+from controllers.session_controller import SessionController
+from domain.order import deserialize_order_items
+from domain.order import serialize_order_items
 from domain.pricing import get_categories as get_menu_categories
 from domain.pricing import \
     get_items_for_category as get_menu_items_for_category
 from domain.pricing import get_price_for_item as get_menu_price
 from domain.pricing import get_sizes_for_item as get_menu_sizes_for_item
+from repositories.auth_repository import hash_pin as repository_hash_pin
+from repositories.auth_repository import save_pin as repository_save_pin
+from repositories.auth_repository import verify_pin as repository_verify_pin
+from repositories.backup_repository import \
+    create_backup as repository_create_backup
+from repositories.backup_repository import \
+    list_backups as repository_list_backups
+from repositories.backup_repository import \
+    restore_backup as repository_restore_backup
 from repositories.menu_repository import \
     load_menu_items as repository_load_menu_items
 from repositories.menu_repository import \
@@ -35,9 +45,9 @@ from repositories.sales_repository import \
 from repositories.sales_repository import \
     get_next_order_number as repository_get_next_order_number
 from repositories.sales_repository import \
-    get_sales_report as repository_get_sales_report
-from repositories.sales_repository import \
     get_sales_analytics as repository_get_sales_analytics
+from repositories.sales_repository import \
+    get_sales_report as repository_get_sales_report
 from repositories.sales_repository import \
     get_session_id as repository_get_session_id
 from repositories.sales_repository import \
@@ -48,30 +58,32 @@ from repositories.sales_repository import \
     record_session_order as repository_record_session_order
 from repositories.sales_repository import \
     record_session_sale as repository_record_session_sale
-from services.receipt_service import \
-    build_kitchen_slip_text as service_build_kitchen_slip_text
+from services.printing_service import \
+    get_default_printer as service_get_default_printer
+from services.printing_service import \
+    get_windows_printers as service_get_windows_printers
+from services.printing_service import \
+    print_with_escpos as service_print_with_escpos
+from services.printing_service import \
+    print_with_windows_spooler as service_print_with_windows_spooler
 from services.receipt_service import \
     build_closing_report_text as service_build_closing_report_text
 from services.receipt_service import \
+    build_kitchen_slip_text as service_build_kitchen_slip_text
+from services.receipt_service import \
     build_receipt_text as service_build_receipt_text
 from services.receipt_service import format_currency as service_format_currency
+from services.report_service import validate_date_range
+from services.validation import validate_contact, validate_image_path
+from services.logging_config import configure_logging
+from ui.current_order_panel import CurrentOrderPanel
+from ui.dialogs import show_session_sales
+from ui.order_entry_panel import OrderEntryPanel
+from ui.receipt_preview import load_preview_image
+from ui.report_dialogs import open_closing_report, open_sales_analytics, open_sales_report
+from ui.session_orders_panel import SessionOrdersPanel
+from ui.summary_panel import SummaryPanel
 from ui.theme import configure_theme
-
-try:
-    from escpos.printer import Win32Raw
-
-    ESC_POS_AVAILABLE = True
-except Exception:
-    Win32Raw = None
-    ESC_POS_AVAILABLE = False
-
-try:
-    import win32print
-
-    WIN32_PRINT_AVAILABLE = True
-except ImportError:
-    win32print = None
-    WIN32_PRINT_AVAILABLE = False
 
 try:
     from PIL import Image, ImageTk
@@ -97,45 +109,29 @@ BACKUP_FILES = {
 
 RESTAURANT = repository_load_restaurant(RESTAURANT_PATH)
 MENU_ITEMS = repository_load_menu_items([], MENU_ITEMS_PATH, include_defaults=False)
+APP_CONTEXT = AppContext(
+    data_dir=DATA_DIR,
+    restaurant_path=RESTAURANT_PATH,
+    menu_items_path=MENU_ITEMS_PATH,
+    session_sales_path=SESSION_SALES_PATH,
+    pin_path=PIN_PATH,
+    backup_dir=BACKUP_DIR,
+    restaurant=RESTAURANT,
+    menu_items=MENU_ITEMS,
+)
+LOGGER = configure_logging(DATA_DIR)
 
 
 def create_backup() -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = BACKUP_DIR / timestamp
-    backup_path.mkdir(parents=True, exist_ok=True)
-    for filename, source_path in BACKUP_FILES.items():
-        if source_path.is_file():
-            shutil.copy2(source_path, backup_path / filename)
-
-    backups = sorted(
-        (path for path in BACKUP_DIR.iterdir() if path.is_dir()),
-        key=lambda path: path.name,
-        reverse=True,
-    )
-    for old_backup in backups[30:]:
-        shutil.rmtree(old_backup, ignore_errors=True)
-    return backup_path
+    return repository_create_backup(BACKUP_DIR, BACKUP_FILES)
 
 
 def list_backups() -> list[Path]:
-    if not BACKUP_DIR.exists():
-        return []
-    return sorted(
-        (path for path in BACKUP_DIR.iterdir() if path.is_dir()),
-        key=lambda path: path.name,
-        reverse=True,
-    )
+    return repository_list_backups(BACKUP_DIR)
 
 
 def restore_backup(backup_path: str | os.PathLike) -> None:
-    source_dir = Path(backup_path)
-    if not source_dir.is_dir() or source_dir.parent != BACKUP_DIR:
-        raise ValueError("Invalid backup location")
-    for filename, target_path in BACKUP_FILES.items():
-        source_path = source_dir / filename
-        if source_path.is_file():
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_path, target_path)
+    repository_restore_backup(backup_path, BACKUP_DIR, BACKUP_FILES)
 
 
 def get_categories() -> list[str]:
@@ -296,21 +292,15 @@ def delete_session_order(
 
 
 def hash_pin(pin: str) -> str:
-    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
+    return repository_hash_pin(pin)
 
 
 def verify_pin(pin: str, pin_path: str | os.PathLike = PIN_PATH) -> bool:
-    try:
-        stored_hash = Path(pin_path).read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeError):
-        return False
-    return hmac.compare_digest(hash_pin(pin), stored_hash)
+    return repository_verify_pin(pin, pin_path)
 
 
 def save_pin(pin: str, pin_path: str | os.PathLike = PIN_PATH) -> None:
-    target_path = Path(pin_path)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(hash_pin(pin), encoding="utf-8")
+    repository_save_pin(pin, pin_path)
 
 
 class RestaurantPOS(ctk.CTk):
@@ -344,7 +334,9 @@ class RestaurantPOS(ctk.CTk):
         except Exception:
             pass
 
-        self.order_items = []
+        self.order_controller = OrderController()
+        self.order_items = self.order_controller.items
+        self.session_controller = SessionController(get_session_orders, delete_session_order)
         self.editing_session_order_index = None
         self.categories = get_categories()
         self.selected_category = tk.StringVar(
@@ -666,18 +658,10 @@ class RestaurantPOS(ctk.CTk):
                     parent=setup_window,
                 )
                 return
-            if not phone or not re.fullmatch(r"[+()\d][\d\s().-]{6,19}", phone):
+            contact_error = validate_contact(phone, email)
+            if contact_error:
                 messagebox.showerror(
-                    "Restaurant setup",
-                    "Enter a valid phone number.",
-                    parent=setup_window,
-                )
-                return
-            if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
-                messagebox.showerror(
-                    "Restaurant setup",
-                    "Enter a valid email address.",
-                    parent=setup_window,
+                    "Restaurant setup", contact_error, parent=setup_window
                 )
                 return
             try:
@@ -702,13 +686,11 @@ class RestaurantPOS(ctk.CTk):
                 ("footer_path", "Footer image", {".png", ".jpg", ".jpeg"}),
             ):
                 image_path = values[key].get().strip()
-                if image_path and (
-                    not Path(image_path).is_file()
-                    or Path(image_path).suffix.lower() not in extensions
-                ):
+                image_error = validate_image_path(image_path, extensions, label)
+                if image_error:
                     messagebox.showerror(
                         "Restaurant setup",
-                        f"Choose a valid {label.lower()} file.",
+                        image_error,
                         parent=setup_window,
                     )
                     return
@@ -790,7 +772,7 @@ class RestaurantPOS(ctk.CTk):
             hover_color=colors["brand_dark"],
             font=("Segoe UI", 12, "bold"),
         ).grid(row=12, column=0, columnspan=2, sticky="ew", padx=34, pady=(4, 30))
-        setup_window.bind("<Return>", lambda event: submit())
+        setup_window.bind("<Return>", lambda _event: submit())
 
     def authenticate_user(self) -> bool:
         self.deiconify()
@@ -909,132 +891,36 @@ class RestaurantPOS(ctk.CTk):
             font=("Segoe UI", 10, "bold"),
         ).grid(row=0, column=2, padx=18)
 
-        item_frame = ctk.CTkFrame(self, fg_color=colors["panel"], corner_radius=14)
-        item_frame.grid(row=1, column=0, sticky="nsew", padx=(18, 8), pady=(8, 10))
-        item_frame.columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            item_frame,
-            text="Build an order",
-            text_color=colors["ink"],
-            font=("Segoe UI", 20, "bold"),
-        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 2))
-        ctk.CTkLabel(
-            item_frame,
-            text="Choose a category, item, size, and quantity.",
-            text_color=colors["muted"],
-            font=("Segoe UI", 11),
-        ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
-        form_frame = ctk.CTkFrame(item_frame, fg_color=colors["soft"], corner_radius=10)
-        form_frame.grid(row=2, column=0, sticky="ew", padx=14, pady=2)
-        form_frame.columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            form_frame,
-            text="CATEGORY",
-            text_color=colors["muted"],
-            font=("Segoe UI", 9, "bold"),
-        ).grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
-        self.category_menu = ttk.Combobox(
-            form_frame,
-            textvariable=self.selected_category,
-            values=self.categories,
-            state="readonly",
-            style="Modern.TCombobox",
+        order_entry_panel = OrderEntryPanel(
+            self,
+            colors,
+            self.selected_category,
+            self.selected_item,
+            self.selected_size,
+            self.quantity,
+            self.table_type,
+            self.table_number,
+            self.categories,
+            self.update_items,
+            self.update_sizes,
+            lambda _event: self.update_price(),
+            self.add_item_to_order,
+            self.change_quantity,
+            self.update_table_numbers,
+            (self.include_service_charge, self.refresh_order_view),
         )
-        self.category_menu.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="ew")
-        ctk.CTkLabel(
-            form_frame,
-            text="MENU ITEM",
-            text_color=colors["muted"],
-            font=("Segoe UI", 9, "bold"),
-        ).grid(row=2, column=0, sticky="w", padx=12, pady=(4, 4))
-        self.item_menu = ttk.Combobox(
-            form_frame,
-            textvariable=self.selected_item,
-            state="readonly",
-            style="Modern.TCombobox",
+        order_entry_panel.frame.grid(
+            row=1, column=0, sticky="nsew", padx=(18, 8), pady=(8, 10)
         )
-        self.item_menu.grid(row=3, column=0, padx=12, pady=(0, 10), sticky="ew")
-        self.category_menu.bind("<<ComboboxSelected>>", self.update_items)
-        ctk.CTkLabel(
-            form_frame,
-            text="SIZE",
-            text_color=colors["muted"],
-            font=("Segoe UI", 9, "bold"),
-        ).grid(row=4, column=0, sticky="w", padx=12, pady=(4, 4))
-        self.size_menu = ttk.Combobox(
-            form_frame,
-            textvariable=self.selected_size,
-            state="readonly",
-            style="Modern.TCombobox",
-        )
-        self.size_menu.grid(row=5, column=0, padx=12, pady=(0, 10), sticky="ew")
-        self.item_menu.bind("<<ComboboxSelected>>", self.update_sizes)
-
-        self.price_label = ctk.CTkLabel(
-            form_frame,
-            text="Unit price: Rs 0.00",
-            text_color=colors["brand"],
-            font=("Segoe UI", 13, "bold"),
-        )
-        self.price_label.grid(row=6, column=0, pady=(2, 12))
+        self.category_menu = order_entry_panel.category_menu
+        self.item_menu = order_entry_panel.item_menu
+        self.size_menu = order_entry_panel.size_menu
+        self.price_label = order_entry_panel.price_label
+        self.table_type_menu = order_entry_panel.table_type_menu
+        self.table_number_menu = order_entry_panel.table_number_menu
+        self.service_charge_check = order_entry_panel.service_charge_check
         self.update_items()
-        self.size_menu.bind("<<ComboboxSelected>>", lambda event: self.update_price())
-        quantity_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
-        quantity_frame.grid(row=3, column=0, sticky="ew", padx=18, pady=(16, 8))
-        ctk.CTkLabel(
-            quantity_frame,
-            text="Quantity",
-            text_color=colors["ink"],
-            font=("Segoe UI", 11, "bold"),
-        ).pack(side="left")
-        quantity_stepper = ctk.CTkFrame(
-            quantity_frame, fg_color=colors["soft"], corner_radius=8, height=38
-        )
-        quantity_stepper.pack(side="right")
-        quantity_stepper.pack_propagate(False)
-        ctk.CTkButton(
-            quantity_stepper,
-            text="-",
-            command=lambda: self.change_quantity(-1),
-            width=38,
-            height=38,
-            corner_radius=7,
-            fg_color=colors["brand"],
-            hover_color=colors["brand_dark"],
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side="left")
-        ctk.CTkEntry(
-            quantity_stepper,
-            textvariable=self.quantity,
-            width=44,
-            height=38,
-            justify="center",
-            border_width=0,
-            fg_color=colors["soft"],
-            text_color=colors["ink"],
-            font=("Segoe UI", 12, "bold"),
-        ).pack(side="left", padx=2)
-        ctk.CTkButton(
-            quantity_stepper,
-            text="+",
-            command=lambda: self.change_quantity(1),
-            width=38,
-            height=38,
-            corner_radius=7,
-            fg_color=colors["brand"],
-            hover_color=colors["brand_dark"],
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side="left")
-        ctk.CTkButton(
-            item_frame,
-            text="+  ADD TO ORDER",
-            command=self.add_item_to_order,
-            height=46,
-            corner_radius=9,
-            fg_color=colors["brand"],
-            hover_color=colors["brand_dark"],
-            font=("Segoe UI", 12, "bold"),
-        ).grid(row=4, column=0, sticky="ew", padx=18, pady=(4, 18))
+        self.update_table_numbers()
 
         middle_container = ctk.CTkFrame(self, fg_color="transparent")
         middle_container.grid(
@@ -1044,139 +930,23 @@ class RestaurantPOS(ctk.CTk):
         middle_container.rowconfigure(0, weight=0)
         middle_container.rowconfigure(1, weight=1)
 
-        table_frame = ctk.CTkFrame(
-            item_frame, fg_color=colors["panel"], corner_radius=14
+        summary_panel = SummaryPanel(
+            self,
+            colors,
+            callbacks={
+                "session_sales": self.display_session_sales,
+                "sales_report": self.display_sales_report,
+                "sales_analytics": self.display_sales_analytics,
+                "closing_report": self.display_closing_report,
+                "change_pin": self.change_pin,
+                "printer_settings": self.open_printer_settings,
+                "backup_restore": self.open_backup_restore,
+            },
         )
-        table_frame.grid(row=6, column=0, sticky="ew", padx=14, pady=(0, 8))
-        table_frame.columnconfigure(1, weight=1)
-        ctk.CTkLabel(
-            table_frame,
-            text="Order destination",
-            text_color=colors["ink"],
-            font=("Segoe UI", 17, "bold"),
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(10, 4))
-        ctk.CTkLabel(
-            table_frame,
-            text="TYPE",
-            text_color=colors["muted"],
-            font=("Segoe UI", 9, "bold"),
-        ).grid(row=1, column=0, sticky="w", padx=16, pady=3)
-        self.table_type_menu = ttk.Combobox(
-            table_frame,
-            textvariable=self.table_type,
-            values=["Indoor", "Outdoor", "Home Delivery"],
-            state="readonly",
-            style="Modern.TCombobox",
-        )
-        self.table_type_menu.grid(row=1, column=1, padx=(0, 16), pady=3, sticky="ew")
-        self.table_type_menu.bind("<<ComboboxSelected>>", self.update_table_numbers)
-        ctk.CTkLabel(
-            table_frame,
-            text="TABLE",
-            text_color=colors["muted"],
-            font=("Segoe UI", 9, "bold"),
-        ).grid(row=2, column=0, sticky="w", padx=16, pady=3)
-        self.table_number_menu = ttk.Combobox(
-            table_frame,
-            textvariable=self.table_number,
-            state="readonly",
-            style="Modern.TCombobox",
-        )
-        self.table_number_menu.grid(row=2, column=1, padx=(0, 16), pady=3, sticky="ew")
-        self.service_charge_check = ctk.CTkCheckBox(
-            table_frame,
-            text="Add Service Charge",
-            variable=self.include_service_charge,
-            command=self.refresh_order_view,
-            text_color=colors["muted"],
-            fg_color=colors["brand"],
-            hover_color=colors["brand_dark"],
-        )
-        self.service_charge_check.grid(
-            row=3, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 8)
-        )
-        self.update_table_numbers()
-
-        summary_frame = ctk.CTkFrame(self, fg_color=colors["brand"], corner_radius=14)
-        summary_frame.grid(
+        summary_panel.frame.grid(
             row=1, column=2, rowspan=2, sticky="nsew", padx=(4, 18), pady=(8, 18)
         )
-        ctk.CTkLabel(
-            summary_frame,
-            text="CURRENT TOTAL",
-            text_color="#F4DCE0",
-            font=("Segoe UI", 10, "bold"),
-        ).pack(anchor="w", padx=20, pady=(20, 2))
-        self.total_label = ctk.CTkLabel(
-            summary_frame,
-            text="Total: Rs 0.00",
-            text_color="white",
-            font=("Segoe UI", 28, "bold"),
-        )
-        self.total_label.pack(anchor="w", padx=20, pady=(0, 18))
-        ctk.CTkButton(
-            summary_frame,
-            text="View session sales",
-            command=self.display_session_sales,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            summary_frame,
-            text="Sales report",
-            command=self.display_sales_report,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            summary_frame,
-            text="Sales analytics",
-            command=self.display_sales_analytics,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            summary_frame,
-            text="End-of-day closing report",
-            command=self.display_closing_report,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            summary_frame,
-            text="Change PIN",
-            command=self.change_pin,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            summary_frame,
-            text="Printer settings",
-            command=self.open_printer_settings,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            summary_frame,
-            text="Backup and restore",
-            command=self.open_backup_restore,
-            height=38,
-            fg_color="#A94353",
-            hover_color=colors["brand_dark"],
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 16))
+        self.total_label = summary_panel.total_label
         ctk.CTkButton(
             middle_container,
             text="Manage menu",
@@ -1188,188 +958,33 @@ class RestaurantPOS(ctk.CTk):
             font=("Segoe UI", 11, "bold"),
         ).grid(row=2, column=0, sticky="ew", pady=(10, 0))
 
-        orders_panel = ctk.CTkFrame(
-            middle_container, fg_color=colors["panel"], corner_radius=14
+        session_orders_panel = SessionOrdersPanel(
+            middle_container,
+            colors,
+            on_select=lambda _event: self.show_selected_order_details(),
+            on_context_menu=self.show_session_order_context_menu,
+            on_edit=self.edit_selected_session_order,
+            on_delete=self.delete_selected_session_order,
         )
-        orders_panel.grid(
+        session_orders_panel.frame.grid(
             row=0, column=0, sticky="nsew", pady=(0, 10)
         )
+        self.session_orders_listbox = session_orders_panel.orders_tree
+        self.session_summary_label = session_orders_panel.summary_label
+        self.order_detail_header = session_orders_panel.detail_header
+        self.order_detail_meta = session_orders_panel.detail_meta
+        self.order_detail_tree = session_orders_panel.detail_tree
+        self.session_order_context_menu = session_orders_panel.context_menu
 
-        ctk.CTkLabel(
-            orders_panel,
-            text="Session orders",
-            text_color=colors["ink"],
-            font=("Segoe UI", 19, "bold"),
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(16, 2))
-        self.session_summary_label = ctk.CTkLabel(
-            orders_panel,
-            text="0 tickets  ·  Rs 0.00",
-            text_color=colors["brand"],
-            font=("Segoe UI", 11, "bold"),
+        current_order_panel = CurrentOrderPanel(
+            middle_container,
+            colors,
+            on_remove=self.remove_selected_item,
+            on_clear=self.clear_order,
+            on_print=self.print_slip,
         )
-        self.session_summary_label.grid(
-            row=1, column=0, columnspan=2, sticky="w", padx=16, pady=(0, 10)
-        )
-        orders_panel.columnconfigure(0, weight=1)
-        orders_panel.rowconfigure(2, weight=3)
-        orders_panel.rowconfigure(3, weight=2)
-        self.session_orders_listbox = ttk.Treeview(
-            orders_panel,
-            columns=("order", "time", "items", "total"),
-            show="headings",
-            selectmode="browse",
-            height=4,
-            style="Modern.Treeview",
-        )
-        self.session_orders_listbox.heading("order", text="Order")
-        self.session_orders_listbox.heading("time", text="Time")
-        self.session_orders_listbox.heading("items", text="Items")
-        self.session_orders_listbox.heading("total", text="Total")
-        self.session_orders_listbox.column("order", width=92, anchor="w", stretch=False)
-        self.session_orders_listbox.column(
-            "time", width=70, anchor="center", stretch=False
-        )
-        self.session_orders_listbox.column("items", width=130, anchor="w")
-        self.session_orders_listbox.column("total", width=92, anchor="e", stretch=False)
-        self.session_orders_listbox.grid(
-            row=2, column=0, sticky="nsew", padx=(12, 0), pady=6
-        )
-        orders_scrollbar = ttk.Scrollbar(
-            orders_panel, orient="vertical", command=self.session_orders_listbox.yview
-        )
-        orders_scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 10), pady=6)
-        detail_frame = ctk.CTkFrame(
-            orders_panel, fg_color=colors["soft"], corner_radius=8
-        )
-        detail_frame.grid(
-            row=3, column=0, columnspan=2, sticky="nsew", padx=12, pady=(4, 12)
-        )
-        detail_frame.columnconfigure(0, weight=1)
-        detail_frame.rowconfigure(2, weight=1)
-        self.order_detail_header = ctk.CTkLabel(
-            detail_frame,
-            text="Select an order",
-            text_color=colors["ink"],
-            font=("Segoe UI", 13, "bold"),
-            anchor="w",
-        )
-        self.order_detail_header.grid(
-            row=0, column=0, sticky="ew", padx=12, pady=(10, 0)
-        )
-        self.order_detail_meta = ctk.CTkLabel(
-            detail_frame,
-            text="",
-            text_color=colors["muted"],
-            font=("Segoe UI", 10),
-            anchor="w",
-        )
-        self.order_detail_meta.grid(row=1, column=0, sticky="ew", padx=12, pady=(1, 5))
-        self.order_detail_tree = ttk.Treeview(
-            detail_frame,
-            columns=("item", "size", "qty", "total"),
-            show="headings",
-            height=2,
-            style="Modern.Treeview",
-        )
-        self.order_detail_tree.heading("item", text="Item")
-        self.order_detail_tree.heading("size", text="Size")
-        self.order_detail_tree.heading("qty", text="Qty")
-        self.order_detail_tree.heading("total", text="Total")
-        self.order_detail_tree.column("item", anchor="w", width=150)
-        self.order_detail_tree.column("size", anchor="center", width=68, stretch=False)
-        self.order_detail_tree.column("qty", anchor="center", width=45, stretch=False)
-        self.order_detail_tree.column("total", anchor="e", width=78, stretch=False)
-        self.order_detail_tree.grid(row=2, column=0, sticky="nsew", padx=8, pady=(0, 8))
-        detail_scrollbar = ttk.Scrollbar(
-            detail_frame, orient="vertical", command=self.order_detail_tree.yview
-        )
-        detail_scrollbar.grid(row=2, column=1, sticky="ns", padx=(0, 8), pady=(0, 8))
-        self.order_detail_tree.configure(yscrollcommand=detail_scrollbar.set)
-        self.session_orders_listbox.configure(yscrollcommand=orders_scrollbar.set)
-        self.session_orders_listbox.bind(
-            "<<TreeviewSelect>>", lambda e: self.show_selected_order_details()
-        )
-        self.session_orders_listbox.bind(
-            "<Button-3>", self.show_session_order_context_menu
-        )
-
-        self.session_order_context_menu = tk.Menu(self, tearoff=0)
-        self.session_order_context_menu.add_command(
-            label="Edit Order", command=self.edit_selected_session_order
-        )
-        self.session_order_context_menu.add_command(
-            label="Delete Order", command=self.delete_selected_session_order
-        )
-
-        order_frame = ctk.CTkFrame(
-            middle_container, fg_color=colors["panel"], corner_radius=14
-        )
-        order_frame.grid(row=1, column=0, sticky="nsew")
-        order_frame.columnconfigure(0, weight=1)
-        order_frame.rowconfigure(0, weight=0)
-        order_frame.rowconfigure(1, weight=1)
-        ctk.CTkLabel(
-            order_frame,
-            text="Current order",
-            text_color=colors["ink"],
-            font=("Segoe UI", 16, "bold"),
-        ).grid(row=0, column=0, sticky="nw", padx=16, pady=(14, 0))
-        self.order_tree = ttk.Treeview(
-            order_frame,
-            columns=("item", "size", "price", "quantity", "total"),
-            show="headings",
-            height=5,
-            style="Modern.Treeview",
-        )
-        self.order_tree.heading("item", text="Item")
-        self.order_tree.heading("size", text="Size")
-        self.order_tree.heading("price", text="Unit Price")
-        self.order_tree.heading("quantity", text="Qty")
-        self.order_tree.heading("total", text="Total")
-        self.order_tree.column("item", width=220, anchor="w")
-        self.order_tree.column("size", width=80, anchor="center")
-        self.order_tree.column("price", width=90, anchor="center")
-        self.order_tree.column("quantity", width=60, anchor="center")
-        self.order_tree.column("total", width=90, anchor="center")
-        self.order_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(4, 6))
-
-        scrollbar = ttk.Scrollbar(
-            order_frame, orient="vertical", command=self.order_tree.yview
-        )
-        self.order_tree.configure(yscroll=scrollbar.set)
-        scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(4, 6))
-        action_frame = ctk.CTkFrame(order_frame, fg_color="transparent")
-        action_frame.grid(
-            row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12)
-        )
-        action_frame.columnconfigure((0, 1, 2), weight=1)
-        ctk.CTkButton(
-            action_frame,
-            text="Remove selected",
-            command=self.remove_selected_item,
-            height=36,
-            fg_color=colors["soft"],
-            hover_color=colors["line"],
-            text_color=colors["ink"],
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkButton(
-            action_frame,
-            text="Clear order",
-            command=self.clear_order,
-            height=36,
-            fg_color=colors["soft"],
-            hover_color=colors["line"],
-            text_color=colors["ink"],
-        ).grid(row=0, column=1, sticky="ew", padx=5)
-        ctk.CTkButton(
-            action_frame,
-            text="PRINT RECEIPT  ->",
-            command=self.print_slip,
-            height=36,
-            fg_color=colors["brand"],
-            hover_color=colors["brand_dark"],
-            font=("Segoe UI", 11, "bold"),
-        ).grid(row=0, column=2, sticky="ew", padx=(5, 0))
+        current_order_panel.frame.grid(row=1, column=0, sticky="nsew")
+        self.order_tree = current_order_panel.order_tree
 
     def load_logo_image(self):
         logo_path = RESTAURANT["logo_path"]
@@ -1905,17 +1520,7 @@ class RestaurantPOS(ctk.CTk):
             return
 
         price = get_price_for_item(item_name, size)
-        total = price * qty
-
-        self.order_items.append(
-            {
-                "name": item_name,
-                "size": size,
-                "quantity": qty,
-                "unit_price": price,
-                "total_price": total,
-            }
-        )
+        self.order_controller.add_item(item_name, size, qty, price)
         self.refresh_order_view()
 
     def remove_selected_item(self):
@@ -1925,7 +1530,7 @@ class RestaurantPOS(ctk.CTk):
             return
 
         index = int(selected[0])
-        self.order_items.pop(index)
+        self.order_controller.remove_item(index)
         self.refresh_order_view()
 
     def clear_order(self):
@@ -1934,20 +1539,18 @@ class RestaurantPOS(ctk.CTk):
         if messagebox.askyesno(
             "Clear order", "Are you sure you want to clear the entire order?"
         ):
-            self.order_items.clear()
+            self.order_controller.clear()
             self.refresh_order_view()
 
     def get_current_order_total(self) -> float:
-        return calculate_order_total(
-            self.order_items,
-            include_service_charge=self.include_service_charge.get(),
-            service_charge=RESTAURANT["service_charge"],
+        return self.order_controller.total(
+            self.include_service_charge.get(), RESTAURANT["service_charge"]
         )
 
     def update_session_sales_label(self):
         # Refresh the session orders list for current session.
         try:
-            orders = get_session_orders(now=datetime.now())
+            orders = self.session_controller.get_orders(now=datetime.now())
             for row in self.session_orders_listbox.get_children():
                 self.session_orders_listbox.delete(row)
             session_total = 0.0
@@ -1987,9 +1590,7 @@ class RestaurantPOS(ctk.CTk):
 
     def display_session_sales(self):
         current_session_sales = get_session_sales(now=datetime.now())
-        messagebox.showinfo(
-            "Session Sales", f"Session Sales: {format_currency(current_session_sales)}"
-        )
+        show_session_sales(self, current_session_sales, format_currency)
 
     def display_closing_report(self):
         session_id = get_session_id(datetime.now())
@@ -2001,94 +1602,28 @@ class RestaurantPOS(ctk.CTk):
             )
             return
 
-        orders = get_session_orders(now=datetime.now())
+        orders = self.session_controller.get_orders(now=datetime.now())
         report_text = build_closing_report_text(orders, session_id)
-        report_window = tk.Toplevel(self)
-        report_window.title(f"End-of-day report - {session_id}")
-        report_window.geometry("620x720")
-        report_window.minsize(520, 560)
-        report_window.transient(self)
-
-        colors = configure_theme(self)
-        report_window.configure(bg=colors["canvas"])
-        ctk.CTkLabel(
-            report_window,
-            text="End-of-day closing report",
-            text_color=colors["ink"],
-            font=("Segoe UI", 21, "bold"),
-        ).pack(anchor="w", padx=18, pady=(18, 2))
-        ctk.CTkLabel(
-            report_window,
-            text=f"Session {session_id}  ·  {len(orders)} ticket(s)",
-            text_color=colors["muted"],
-            font=("Segoe UI", 10),
-        ).pack(anchor="w", padx=18, pady=(0, 12))
-
-        text_area = tk.Text(
-            report_window,
-            wrap="none",
-            padx=14,
-            pady=14,
-            font=("Courier New", 10),
-            bg=colors["panel"],
-            fg=colors["ink"],
-            relief="flat",
+        open_closing_report(
+            self,
+            session_id,
+            orders,
+            report_text,
+            configure_theme(self),
+            self.print_with_escpos,
         )
-        text_area.insert("1.0", report_text)
-        text_area.configure(state="disabled")
-        text_area.pack(fill="both", expand=True, padx=18, pady=(0, 12))
-
-        action_frame = ctk.CTkFrame(report_window, fg_color="transparent")
-        action_frame.pack(fill="x", padx=18, pady=(0, 18))
-
-        def export_report():
-            target = filedialog.asksaveasfilename(
-                parent=report_window,
-                title="Export closing report",
-                defaultextension=".txt",
-                filetypes=[("Text files", "*.txt")],
-            )
-            if not target:
-                return
-            Path(target).write_text(report_text, encoding="utf-8")
-            messagebox.showinfo(
-                "Closing report", "The closing report was exported.", parent=report_window
-            )
-
-        def print_report():
-            def worker():
-                success, message, _ = self.print_with_escpos(report_text)
-                self.after(
-                    0,
-                    lambda: messagebox.showinfo(
-                        "Closing report" if success else "Print error",
-                        message,
-                        parent=report_window,
-                    ),
-                )
-
-            threading.Thread(target=worker, daemon=True).start()
-
-        ctk.CTkButton(
-            action_frame,
-            text="Export report",
-            command=export_report,
-            height=38,
-            fg_color=colors["soft"],
-            hover_color=colors["line"],
-            text_color=colors["ink"],
-        ).pack(side="left", expand=True, fill="x", padx=(0, 6))
-        ctk.CTkButton(
-            action_frame,
-            text="Print report",
-            command=print_report,
-            height=38,
-            fg_color=colors["brand"],
-            hover_color=colors["brand_dark"],
-            font=("Segoe UI", 11, "bold"),
-        ).pack(side="left", expand=True, fill="x", padx=(6, 0))
 
     def display_sales_analytics(self):
+        if not getattr(self, "_legacy_report_ui", False):
+            return open_sales_analytics(
+                self,
+                configure_theme(self),
+                get_sales_analytics,
+                format_currency,
+                validate_date_range,
+            )
+
+        # Legacy inline implementation retained temporarily for compatibility.
         analytics_window = tk.Toplevel(self)
         analytics_window.title("Sales analytics")
         analytics_window.geometry("760x620")
@@ -2152,14 +1687,10 @@ class RestaurantPOS(ctk.CTk):
         summary_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 12))
 
         def refresh_analytics():
-            start_date = start_var.get().strip() or None
-            end_date = end_var.get().strip() or None
             try:
-                for value in (start_date, end_date):
-                    if value:
-                        datetime.strptime(value, "%Y-%m-%d")
-                if start_date and end_date and start_date > end_date:
-                    raise ValueError
+                start_date, end_date = validate_date_range(
+                    start_var.get(), end_var.get()
+                )
             except ValueError:
                 messagebox.showerror(
                     "Sales analytics",
@@ -2206,6 +1737,16 @@ class RestaurantPOS(ctk.CTk):
         refresh_analytics()
 
     def display_sales_report(self):
+        if not getattr(self, "_legacy_report_ui", False):
+            return open_sales_report(
+                self,
+                configure_theme(self),
+                get_sales_report,
+                format_currency,
+                validate_date_range,
+            )
+
+        # Legacy inline implementation retained temporarily for compatibility.
         report_window = tk.Toplevel(self)
         report_window.title("Sales Report")
         report_window.geometry(
@@ -2285,14 +1826,10 @@ class RestaurantPOS(ctk.CTk):
         )
 
         def refresh_report():
-            start_date = start_var.get().strip() or None
-            end_date = end_var.get().strip() or None
             try:
-                for value in (start_date, end_date):
-                    if value:
-                        datetime.strptime(value, "%Y-%m-%d")
-                if start_date and end_date and start_date > end_date:
-                    raise ValueError
+                start_date, end_date = validate_date_range(
+                    start_var.get(), end_var.get()
+                )
             except ValueError:
                 messagebox.showerror(
                     "Sales report",
@@ -2393,29 +1930,7 @@ class RestaurantPOS(ctk.CTk):
     def load_session_order_into_current_order(
         self, order: dict, order_index: int | None = None
     ) -> None:
-        self.order_items = []
-        for item in order.get("items", []) or []:
-            quantity = item.get("quantity", item.get("qty", 1))
-            try:
-                quantity = int(quantity)
-            except (TypeError, ValueError):
-                quantity = 1
-
-            unit_price = item.get("unit_price", item.get("price", 0.0))
-            total_price = item.get(
-                "total_price",
-                item.get("total", item.get("amount", float(unit_price) * quantity)),
-            )
-
-            self.order_items.append(
-                {
-                    "name": item.get("name", ""),
-                    "size": item.get("size", ""),
-                    "quantity": quantity,
-                    "unit_price": float(unit_price),
-                    "total_price": float(total_price),
-                }
-            )
+        self.order_controller.replace(deserialize_order_items(order.get("items", [])))
 
         self.editing_session_order_index = order_index
         self.refresh_order_view()
@@ -2426,7 +1941,7 @@ class RestaurantPOS(ctk.CTk):
             return
 
         order_index = int(selection[0])
-        orders = get_session_orders(now=datetime.now())
+        orders = self.session_controller.get_orders(now=datetime.now())
         if order_index < 0 or order_index >= len(orders):
             return
 
@@ -2439,7 +1954,7 @@ class RestaurantPOS(ctk.CTk):
             return
 
         order_index = int(selection[0])
-        orders = get_session_orders(now=datetime.now())
+        orders = self.session_controller.get_orders(now=datetime.now())
         if order_index < 0 or order_index >= len(orders):
             return
 
@@ -2449,7 +1964,7 @@ class RestaurantPOS(ctk.CTk):
         ):
             return
 
-        delete_session_order(order_index, now=datetime.now())
+        self.session_controller.delete_order(order_index, now=datetime.now())
         self.refresh_session_orders_view()
 
     def show_selected_order_details(self):
@@ -2517,22 +2032,10 @@ class RestaurantPOS(ctk.CTk):
         self.update_session_sales_label()
 
     def get_windows_printers(self) -> list[str]:
-        if not WIN32_PRINT_AVAILABLE or win32print is None:
-            return []
-        try:
-            flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-            return [entry[2] for entry in win32print.EnumPrinters(flags)]
-        except Exception:
-            return []
+        return service_get_windows_printers()
 
     def get_default_printer(self) -> str | None:
-        if not WIN32_PRINT_AVAILABLE or win32print is None:
-            return None
-        try:
-            return win32print.GetDefaultPrinter()
-        except Exception:
-            printers = self.get_windows_printers()
-            return printers[0] if printers else None
+        return service_get_default_printer()
 
     def open_printer_settings(self):
         settings_window = tk.Toplevel(self)
@@ -2710,91 +2213,10 @@ class RestaurantPOS(ctk.CTk):
         ).pack(side="left", expand=True, fill="x", padx=(4, 0))
 
     def print_with_windows_spooler(self, text: str, printer_name: str) -> None:
-        if not WIN32_PRINT_AVAILABLE or win32print is None:
-            raise RuntimeError("Windows printing is not available")
-        handle = win32print.OpenPrinter(printer_name)
-        try:
-            win32print.StartDocPrinter(
-                handle, 1, ("Restaurant POS receipt", None, "RAW")
-            )
-            try:
-                win32print.StartPagePrinter(handle)
-                win32print.WritePrinter(handle, text.encode("cp437", errors="replace"))
-                win32print.EndPagePrinter(handle)
-            finally:
-                win32print.EndDocPrinter(handle)
-        finally:
-            win32print.ClosePrinter(handle)
+        service_print_with_windows_spooler(text, printer_name)
 
     def print_with_escpos(self, text: str, printer_name: str | None = None) -> tuple:
-        """Print directly to the selected Windows printer.
-
-        Returns ``(success, message, None)``. No receipt file is created when
-        printing fails because the user requested physical printer output.
-        """
-        printer_name = printer_name or RESTAURANT.get("printer_name") or self.get_default_printer()
-        if not printer_name:
-            return (False, "No Windows printer is configured or available.", None)
-
-        if ESC_POS_AVAILABLE and Win32Raw is not None:
-            try:
-                printer = None
-                try:
-                    printer = Win32Raw(printer_name)
-                    for image_path, max_width in (
-                        (RESTAURANT.get("logo_path", ""), 576),
-                    ):
-                        self.print_escpos_image(printer, image_path, max_width)
-                    printer.set(align="center", bold=True)
-                    printer.textln(RESTAURANT["name"])
-
-                    printer.set(align="center", bold=False, width=1, height=1)
-                    printer.textln(RESTAURANT["address"])
-                    if RESTAURANT["phone"]:
-                        printer.textln(f'Phone: {RESTAURANT["phone"]}')
-                    if RESTAURANT["email"]:
-                        printer.textln(RESTAURANT["email"])
-                    printer.textln("-" * 48)
-                    printer.set(align="left")
-                    for line in text.splitlines():
-                        printer.textln(line)
-
-                    self.print_escpos_image(
-                        printer, RESTAURANT.get("footer_path", ""), 576
-                    )
-
-                    printer.cut()
-                    return (True, "sent to printer", None)
-                finally:
-                    if printer:
-                        try:
-                            printer.close()
-                        except:
-                            pass
-            except Exception as printer_error:
-                print(f"ESC/POS unavailable on {printer_name}: {printer_error}")
-
-        try:
-            self.print_with_windows_spooler(text, printer_name)
-            return (True, f"sent to printer: {printer_name}", None)
-        except Exception as printer_error:
-            return (False, f"Unable to print on {printer_name}: {printer_error}", None)
-
-    def print_escpos_image(self, printer, image_path: str, max_width: int) -> None:
-        if not PIL_AVAILABLE or not image_path or not os.path.isfile(image_path):
-            return
-        image = Image.open(image_path).convert("L")
-        if image.width > max_width:
-            ratio = max_width / image.width
-            image = image.resize(
-                (max_width, max(1, int(image.height * ratio))),
-                Image.Resampling.LANCZOS
-                if hasattr(Image, "Resampling")
-                else Image.ANTIALIAS,
-            )
-        printer.set(align="center")
-        printer.image(image)
-        printer.textln("")
+        return service_print_with_escpos(text, RESTAURANT, printer_name)
 
     def print_slip(self):
         if not self.order_items:
@@ -2807,16 +2229,7 @@ class RestaurantPOS(ctk.CTk):
             "table_type": self.table_type.get(),
             "table_number": self.table_number.get(),
             "include_service_charge": self.include_service_charge.get(),
-            "items": [
-                {
-                    "name": it["name"],
-                    "size": it["size"],
-                    "qty": it["quantity"],
-                    "unit_price": it["unit_price"],
-                    "total": it["total_price"],
-                }
-                for it in self.order_items
-            ],
+            "items": serialize_order_items(self.order_items),
         }
         replace_index = self.editing_session_order_index
         order_number = get_next_order_number(
@@ -2891,23 +2304,11 @@ class RestaurantPOS(ctk.CTk):
         )
 
         logo_path = RESTAURANT["logo_path"]
-        if PIL_AVAILABLE and logo_path and os.path.exists(logo_path):
-            try:
-                img = Image.open(logo_path)
-                img.thumbnail(
-                    (320, 120),
-                    (
-                        Image.Resampling.LANCZOS
-                        if hasattr(Image, "Resampling")
-                        else Image.ANTIALIAS
-                    ),
-                )
-                logo_image = ImageTk.PhotoImage(img)
-                logo_label = ttk.Label(receipt_window, image=logo_image)
-                logo_label.image = logo_image
-                logo_label.pack(pady=8)
-            except Exception:
-                pass
+        logo_image = load_preview_image(logo_path, (320, 120), receipt_window)
+        if logo_image:
+            logo_label = ttk.Label(receipt_window, image=logo_image)
+            logo_label.image = logo_image
+            logo_label.pack(pady=8)
 
         text_area = tk.Text(
             receipt_window, wrap="none", padx=0, pady=0, font=("Courier New", 6)
@@ -2917,23 +2318,11 @@ class RestaurantPOS(ctk.CTk):
         text_area.pack(fill="both", expand=True)
 
         footer_path = RESTAURANT["footer_path"]
-        if PIL_AVAILABLE and footer_path and os.path.exists(footer_path):
-            try:
-                img = Image.open(footer_path)
-                img.thumbnail(
-                    (320, 80),
-                    (
-                        Image.Resampling.LANCZOS
-                        if hasattr(Image, "Resampling")
-                        else Image.ANTIALIAS
-                    ),
-                )
-                footer_image = ImageTk.PhotoImage(img)
-                footer_label = ttk.Label(receipt_window, image=footer_image)
-                footer_label.image = footer_image
-                footer_label.pack(pady=8)
-            except Exception:
-                pass
+        footer_image = load_preview_image(footer_path, (320, 80), receipt_window)
+        if footer_image:
+            footer_label = ttk.Label(receipt_window, image=footer_image)
+            footer_label.image = footer_image
+            footer_label.pack(pady=8)
 
         ttk.Button(receipt_window, text="Close", command=receipt_window.destroy).pack(
             pady=10
@@ -2968,8 +2357,13 @@ class RestaurantPOS(ctk.CTk):
 
 
 def main():
-    app = RestaurantPOS()
-    app.mainloop()
+    LOGGER.info("Starting Restaurant POS")
+    try:
+        app = RestaurantPOS()
+        app.mainloop()
+    except Exception:
+        LOGGER.exception("Restaurant POS terminated unexpectedly")
+        raise
 
 
 if __name__ == "__main__":

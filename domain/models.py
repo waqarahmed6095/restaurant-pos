@@ -31,3 +31,18 @@ class Order:
     @property
     def subtotal(self) -> float:
         return sum(item.total_price for item in self.items)
+
+
+@dataclass
+class RestaurantProfile:
+    name: str = ""
+    address: str = ""
+    phone: str = ""
+    email: str = ""
+    logo_path: str = ""
+    app_icon_path: str = ""
+    footer_path: str = ""
+    printer_name: str = ""
+    service_charge: float = 0.0
+    indoor_tables: int = 10
+    outdoor_tables: int = 25

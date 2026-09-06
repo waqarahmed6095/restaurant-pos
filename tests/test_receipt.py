@@ -10,6 +10,12 @@ from main import (BACKUP_FILES, build_kitchen_slip_text, build_receipt_text,
                   get_sales_analytics, get_session_sales, hash_pin, load_menu_items,
                   record_session_order, record_session_sale, save_menu_items,
                   save_pin, verify_pin)
+from controllers.order_controller import OrderController
+from services.validation import validate_contact, validate_image_path
+from ui.current_order_panel import CurrentOrderPanel
+from ui.order_entry_panel import OrderEntryPanel
+from ui.session_orders_panel import SessionOrdersPanel
+from ui.summary_panel import SummaryPanel
 from repositories.menu_repository import \
     load_menu_items as repository_load_menu_items
 from repositories.restaurant_repository import load_restaurant, save_restaurant
@@ -20,6 +26,24 @@ from services.receipt_service import \
 
 
 class ReceiptFormattingTests(unittest.TestCase):
+    def test_order_controller_manages_items_and_total(self):
+        controller = OrderController()
+        controller.add_item("Tea", "Small", 2, 50)
+        self.assertEqual(controller.total(True, 30), 130.0)
+        controller.remove_item(0)
+        self.assertEqual(controller.items, [])
+
+    def test_validation_helpers(self):
+        self.assertIsNone(validate_contact("03072700065", "test@example.com"))
+        self.assertIsNotNone(validate_contact("bad", "test@example.com"))
+        self.assertIsNotNone(validate_image_path("missing.png", {".png"}, "Logo"))
+
+    def test_extracted_panels_have_stable_public_interfaces(self):
+        self.assertTrue(hasattr(CurrentOrderPanel, "__init__"))
+        self.assertTrue(hasattr(OrderEntryPanel, "__init__"))
+        self.assertTrue(hasattr(SessionOrdersPanel, "__init__"))
+        self.assertTrue(hasattr(SummaryPanel, "__init__"))
+
     def test_wraps_long_item_name_across_multiple_lines(self):
         order_items = [
             {
