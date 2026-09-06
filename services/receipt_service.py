@@ -144,11 +144,15 @@ def build_closing_report_text(
         if not order.get("include_service_charge", bool(order_service_charge)):
             order_service_charge = 0.0
         if order_service_charge == 0.0 and order.get("include_service_charge"):
-            order_service_charge = min(service_charge, max(0.0, order_total - order_subtotal))
+            order_service_charge = min(
+                service_charge, max(0.0, order_total - order_subtotal)
+            )
 
         order_number = str(order.get("order_number", f"#{index}"))[:16]
         lines.append(
-            f"{order_number:<16}{len(order_items):>8}{format_currency(order_total):>24}"[:width]
+            f"{order_number:<16}{len(order_items):>8}{format_currency(order_total):>24}"[
+                :width
+            ]
         )
         subtotal += order_subtotal
         applied_service_charge += order_service_charge

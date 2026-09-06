@@ -24,4 +24,6 @@ class OrderController:
 
     def total(self, include_service_charge: bool, service_charge: float) -> float:
         subtotal = sum(item["total_price"] for item in self.items)
-        return subtotal + service_charge if include_service_charge and self.items else 0.0
+        return (
+            subtotal + service_charge if include_service_charge and self.items else 0.0
+        )

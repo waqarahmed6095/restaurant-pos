@@ -61,7 +61,9 @@ def open_closing_report(
         if not target:
             return
         Path(target).write_text(report_text, encoding="utf-8")
-        messagebox.showinfo("Closing report", "The closing report was exported.", parent=report_window)
+        messagebox.showinfo(
+            "Closing report", "The closing report was exported.", parent=report_window
+        )
 
     def start_print():
         def worker():
@@ -99,7 +101,9 @@ def open_closing_report(
     return report_window
 
 
-def open_sales_analytics(parent, colors, get_analytics, format_currency, validate_range):
+def open_sales_analytics(
+    parent, colors, get_analytics, format_currency, validate_range
+):
     window = tk.Toplevel(parent)
     window.title("Sales analytics")
     window.geometry("760x620")
@@ -109,9 +113,12 @@ def open_sales_analytics(parent, colors, get_analytics, format_currency, validat
     window.columnconfigure(0, weight=1)
     window.rowconfigure(2, weight=1)
 
-    ctk.CTkLabel(window, text="Sales analytics", text_color=colors["ink"], font=("Segoe UI", 21, "bold")).grid(
-        row=0, column=0, sticky="w", padx=18, pady=(18, 2)
-    )
+    ctk.CTkLabel(
+        window,
+        text="Sales analytics",
+        text_color=colors["ink"],
+        font=("Segoe UI", 21, "bold"),
+    ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 2))
     ctk.CTkLabel(
         window,
         text="See which menu items sell most and generate the most revenue.",
@@ -127,11 +134,23 @@ def open_sales_analytics(parent, colors, get_analytics, format_currency, validat
     controls.grid(row=0, column=0, sticky="ew", padx=12, pady=12)
     start_var, end_var = tk.StringVar(), tk.StringVar()
     ttk.Label(controls, text="From (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
-    ttk.Entry(controls, textvariable=start_var, width=14).pack(side="left", padx=(0, 10))
+    ttk.Entry(controls, textvariable=start_var, width=14).pack(
+        side="left", padx=(0, 10)
+    )
     ttk.Label(controls, text="To (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
     ttk.Entry(controls, textvariable=end_var, width=14).pack(side="left", padx=(0, 10))
-    tree = ttk.Treeview(frame, columns=("item", "size", "quantity", "revenue"), show="headings", style="Modern.Treeview")
-    for column, heading in (("item", "Item"), ("size", "Size"), ("quantity", "Qty sold"), ("revenue", "Revenue")):
+    tree = ttk.Treeview(
+        frame,
+        columns=("item", "size", "quantity", "revenue"),
+        show="headings",
+        style="Modern.Treeview",
+    )
+    for column, heading in (
+        ("item", "Item"),
+        ("size", "Size"),
+        ("quantity", "Qty sold"),
+        ("revenue", "Revenue"),
+    ):
         tree.heading(column, text=heading)
     tree.column("item", width=320, anchor="w")
     tree.column("size", width=130, anchor="w")
@@ -141,14 +160,23 @@ def open_sales_analytics(parent, colors, get_analytics, format_currency, validat
     scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
     scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 12), pady=(0, 12))
     tree.configure(yscrollcommand=scrollbar.set)
-    summary = ctk.CTkLabel(frame, text="0 items sold  ·  Revenue: Rs 0.00", text_color=colors["brand"], font=("Segoe UI", 12, "bold"))
+    summary = ctk.CTkLabel(
+        frame,
+        text="0 items sold  ·  Revenue: Rs 0.00",
+        text_color=colors["brand"],
+        font=("Segoe UI", 12, "bold"),
+    )
     summary.grid(row=2, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 12))
 
     def refresh():
         try:
             start, end = validate_range(start_var.get(), end_var.get())
         except ValueError:
-            messagebox.showerror("Sales analytics", "Enter a valid date range in YYYY-MM-DD format.", parent=window)
+            messagebox.showerror(
+                "Sales analytics",
+                "Enter a valid date range in YYYY-MM-DD format.",
+                parent=window,
+            )
             return
         data = get_analytics(start_date=start, end_date=end)
         for row in tree.get_children():
@@ -156,12 +184,31 @@ def open_sales_analytics(parent, colors, get_analytics, format_currency, validat
         quantity = sum(int(item["quantity"]) for item in data)
         revenue = sum(float(item["revenue"]) for item in data)
         for item in data:
-            tree.insert("", "end", values=(item["name"], item["size"], item["quantity"], format_currency(item["revenue"])))
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    item["name"],
+                    item["size"],
+                    item["quantity"],
+                    format_currency(item["revenue"]),
+                ),
+            )
         if not data:
             tree.insert("", "end", values=("No item sales recorded", "", "", ""))
-        summary.configure(text=f"{quantity} items sold  ·  Revenue: {format_currency(revenue)}")
+        summary.configure(
+            text=f"{quantity} items sold  ·  Revenue: {format_currency(revenue)}"
+        )
 
-    ctk.CTkButton(controls, text="Refresh", command=refresh, width=90, height=32, fg_color=colors["brand"], hover_color=colors["brand_dark"]).pack(side="left")
+    ctk.CTkButton(
+        controls,
+        text="Refresh",
+        command=refresh,
+        width=90,
+        height=32,
+        fg_color=colors["brand"],
+        hover_color=colors["brand_dark"],
+    ).pack(side="left")
     refresh()
     return window
 
@@ -175,8 +222,18 @@ def open_sales_report(parent, colors, get_report, format_currency, validate_rang
     window.configure(bg=colors["canvas"])
     window.columnconfigure(0, weight=1)
     window.rowconfigure(2, weight=1)
-    ctk.CTkLabel(window, text="Sales report", text_color=colors["ink"], font=("Segoe UI", 20, "bold")).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 2))
-    ctk.CTkLabel(window, text="Review session totals or filter by date range.", text_color=colors["muted"], font=("Segoe UI", 10)).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
+    ctk.CTkLabel(
+        window,
+        text="Sales report",
+        text_color=colors["ink"],
+        font=("Segoe UI", 20, "bold"),
+    ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 2))
+    ctk.CTkLabel(
+        window,
+        text="Review session totals or filter by date range.",
+        text_color=colors["muted"],
+        font=("Segoe UI", 10),
+    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
     filters = ctk.CTkFrame(window, fg_color=colors["panel"], corner_radius=10)
     filters.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 8))
     filters.columnconfigure(0, weight=1)
@@ -188,8 +245,17 @@ def open_sales_report(parent, colors, get_report, format_currency, validate_rang
     ttk.Entry(controls, textvariable=start_var, width=14).pack(side="left", padx=(0, 8))
     ttk.Label(controls, text="To (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
     ttk.Entry(controls, textvariable=end_var, width=14).pack(side="left", padx=(0, 8))
-    tree = ttk.Treeview(filters, columns=("date", "orders", "total"), show="headings", style="Modern.Treeview")
-    for column, heading in (("date", "Session date"), ("orders", "Orders"), ("total", "Total sales")):
+    tree = ttk.Treeview(
+        filters,
+        columns=("date", "orders", "total"),
+        show="headings",
+        style="Modern.Treeview",
+    )
+    for column, heading in (
+        ("date", "Session date"),
+        ("orders", "Orders"),
+        ("total", "Total sales"),
+    ):
         tree.heading(column, text=heading)
     tree.column("date", width=240, anchor="w")
     tree.column("orders", width=120, anchor="center")
@@ -198,25 +264,52 @@ def open_sales_report(parent, colors, get_report, format_currency, validate_rang
     scrollbar = ttk.Scrollbar(filters, orient="vertical", command=tree.yview)
     scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 16), pady=(0, 6))
     tree.configure(yscrollcommand=scrollbar.set)
-    summary = ctk.CTkLabel(filters, text="Grand total: Rs 0.00", text_color=colors["brand"], font=("Segoe UI", 14, "bold"))
+    summary = ctk.CTkLabel(
+        filters,
+        text="Grand total: Rs 0.00",
+        text_color=colors["brand"],
+        font=("Segoe UI", 14, "bold"),
+    )
     summary.grid(row=2, column=0, columnspan=2, sticky="e", padx=16, pady=(2, 6))
 
     def refresh():
         try:
             start, end = validate_range(start_var.get(), end_var.get())
         except ValueError:
-            messagebox.showerror("Sales report", "Enter a valid date range in YYYY-MM-DD format.", parent=window)
+            messagebox.showerror(
+                "Sales report",
+                "Enter a valid date range in YYYY-MM-DD format.",
+                parent=window,
+            )
             return
         data = get_report(start_date=start, end_date=end)
         for row in tree.get_children():
             tree.delete(row)
         total = sum(entry["total"] for entry in data)
         for entry in data:
-            tree.insert("", "end", values=(entry["session_id"], entry["order_count"], format_currency(entry["total"])))
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    entry["session_id"],
+                    entry["order_count"],
+                    format_currency(entry["total"]),
+                ),
+            )
         if not data:
-            tree.insert("", "end", values=("No sales recorded", "", format_currency(0.0)))
+            tree.insert(
+                "", "end", values=("No sales recorded", "", format_currency(0.0))
+            )
         summary.configure(text=f"Grand total: {format_currency(total)}")
 
-    ctk.CTkButton(controls, text="Filter", command=refresh, width=90, height=32, fg_color=colors["brand"], hover_color=colors["brand_dark"]).pack(side="left")
+    ctk.CTkButton(
+        controls,
+        text="Filter",
+        command=refresh,
+        width=90,
+        height=32,
+        fg_color=colors["brand"],
+        hover_color=colors["brand_dark"],
+    ).pack(side="left")
     refresh()
     return window

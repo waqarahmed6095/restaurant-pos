@@ -14,8 +14,7 @@ import customtkinter as ctk
 from app_context import AppContext
 from controllers.order_controller import OrderController
 from controllers.session_controller import SessionController
-from domain.order import deserialize_order_items
-from domain.order import serialize_order_items
+from domain.order import deserialize_order_items, serialize_order_items
 from domain.pricing import get_categories as get_menu_categories
 from domain.pricing import \
     get_items_for_category as get_menu_items_for_category
@@ -58,6 +57,7 @@ from repositories.sales_repository import \
     record_session_order as repository_record_session_order
 from repositories.sales_repository import \
     record_session_sale as repository_record_session_sale
+from services.logging_config import configure_logging
 from services.printing_service import \
     get_default_printer as service_get_default_printer
 from services.printing_service import \
@@ -75,13 +75,13 @@ from services.receipt_service import \
 from services.receipt_service import format_currency as service_format_currency
 from services.report_service import validate_date_range
 from services.validation import validate_contact, validate_image_path
-from services.logging_config import configure_logging
 from ui.current_order_panel import CurrentOrderPanel
 from ui.dialogs import show_session_sales
 from ui.order_entry_panel import OrderEntryPanel
 from ui.pin_dialog import prompt_pin
 from ui.receipt_preview import load_preview_image
-from ui.report_dialogs import open_closing_report, open_sales_analytics, open_sales_report
+from ui.report_dialogs import (open_closing_report, open_sales_analytics,
+                               open_sales_report)
 from ui.session_orders_panel import SessionOrdersPanel
 from ui.summary_panel import SummaryPanel
 from ui.theme import configure_theme
@@ -337,7 +337,9 @@ class RestaurantPOS(ctk.CTk):
 
         self.order_controller = OrderController()
         self.order_items = self.order_controller.items
-        self.session_controller = SessionController(get_session_orders, delete_session_order)
+        self.session_controller = SessionController(
+            get_session_orders, delete_session_order
+        )
         self.editing_session_order_index = None
         self.categories = get_categories()
         self.selected_category = tk.StringVar(
@@ -939,9 +941,7 @@ class RestaurantPOS(ctk.CTk):
             on_edit=self.edit_selected_session_order,
             on_delete=self.delete_selected_session_order,
         )
-        session_orders_panel.frame.grid(
-            row=0, column=0, sticky="nsew", pady=(0, 10)
-        )
+        session_orders_panel.frame.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
         self.session_orders_listbox = session_orders_panel.orders_tree
         self.session_summary_label = session_orders_panel.summary_label
         self.order_detail_header = session_orders_panel.detail_header
@@ -1620,7 +1620,9 @@ class RestaurantPOS(ctk.CTk):
             font=("Segoe UI", 10),
         ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 12))
 
-        filter_frame = ctk.CTkFrame(analytics_window, fg_color=colors["panel"], corner_radius=10)
+        filter_frame = ctk.CTkFrame(
+            analytics_window, fg_color=colors["panel"], corner_radius=10
+        )
         filter_frame.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         filter_frame.columnconfigure(0, weight=1)
         filter_frame.rowconfigure(1, weight=1)
@@ -1629,9 +1631,13 @@ class RestaurantPOS(ctk.CTk):
         start_var = tk.StringVar()
         end_var = tk.StringVar()
         ttk.Label(controls, text="From (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
-        ttk.Entry(controls, textvariable=start_var, width=14).pack(side="left", padx=(0, 10))
+        ttk.Entry(controls, textvariable=start_var, width=14).pack(
+            side="left", padx=(0, 10)
+        )
         ttk.Label(controls, text="To (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
-        ttk.Entry(controls, textvariable=end_var, width=14).pack(side="left", padx=(0, 10))
+        ttk.Entry(controls, textvariable=end_var, width=14).pack(
+            side="left", padx=(0, 10)
+        )
 
         tree = ttk.Treeview(
             filter_frame,
@@ -1657,7 +1663,9 @@ class RestaurantPOS(ctk.CTk):
             text_color=colors["brand"],
             font=("Segoe UI", 12, "bold"),
         )
-        summary_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 12))
+        summary_label.grid(
+            row=2, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 12)
+        )
 
         def refresh_analytics():
             try:
@@ -2094,7 +2102,9 @@ class RestaurantPOS(ctk.CTk):
             font=("Segoe UI", 10),
         ).pack(anchor="w", padx=20, pady=(0, 12))
 
-        list_frame = ctk.CTkFrame(backup_window, fg_color=colors["panel"], corner_radius=10)
+        list_frame = ctk.CTkFrame(
+            backup_window, fg_color=colors["panel"], corner_radius=10
+        )
         list_frame.pack(fill="both", expand=True, padx=20, pady=(0, 12))
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
@@ -2107,7 +2117,9 @@ class RestaurantPOS(ctk.CTk):
             relief="flat",
         )
         backup_list.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
-        backup_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=backup_list.yview)
+        backup_scroll = ttk.Scrollbar(
+            list_frame, orient="vertical", command=backup_list.yview
+        )
         backup_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 10), pady=10)
         backup_list.configure(yscrollcommand=backup_scroll.set)
 
@@ -2125,15 +2137,21 @@ class RestaurantPOS(ctk.CTk):
                 backup = create_backup()
                 refresh_backups()
                 messagebox.showinfo(
-                    "Backup and restore", f"Backup created: {backup.name}", parent=backup_window
+                    "Backup and restore",
+                    f"Backup created: {backup.name}",
+                    parent=backup_window,
                 )
             except OSError as exc:
-                messagebox.showerror("Backup and restore", str(exc), parent=backup_window)
+                messagebox.showerror(
+                    "Backup and restore", str(exc), parent=backup_window
+                )
 
         def export_backup():
             selection = backup_list.curselection()
             if not selection:
-                messagebox.showinfo("Backup and restore", "Select a backup first.", parent=backup_window)
+                messagebox.showinfo(
+                    "Backup and restore", "Select a backup first.", parent=backup_window
+                )
                 return
             source = list_backups()[selection[0]]
             target = filedialog.asksaveasfilename(
@@ -2144,12 +2162,16 @@ class RestaurantPOS(ctk.CTk):
             )
             if target:
                 shutil.make_archive(str(Path(target).with_suffix("")), "zip", source)
-                messagebox.showinfo("Backup and restore", "Backup exported.", parent=backup_window)
+                messagebox.showinfo(
+                    "Backup and restore", "Backup exported.", parent=backup_window
+                )
 
         def restore_selected_backup():
             selection = backup_list.curselection()
             if not selection:
-                messagebox.showinfo("Backup and restore", "Select a backup first.", parent=backup_window)
+                messagebox.showinfo(
+                    "Backup and restore", "Select a backup first.", parent=backup_window
+                )
                 return
             source = list_backups()[selection[0]]
             if not messagebox.askyesno(
@@ -2173,16 +2195,25 @@ class RestaurantPOS(ctk.CTk):
 
         action_frame = ctk.CTkFrame(backup_window, fg_color="transparent")
         action_frame.pack(fill="x", padx=20, pady=(0, 18))
-        ctk.CTkButton(action_frame, text="Create backup", command=make_backup, height=38).pack(
-            side="left", expand=True, fill="x", padx=(0, 4)
-        )
         ctk.CTkButton(
-            action_frame, text="Export selected", command=export_backup, height=38,
-            fg_color=colors["soft"], hover_color=colors["line"], text_color=colors["ink"]
+            action_frame, text="Create backup", command=make_backup, height=38
+        ).pack(side="left", expand=True, fill="x", padx=(0, 4))
+        ctk.CTkButton(
+            action_frame,
+            text="Export selected",
+            command=export_backup,
+            height=38,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
         ).pack(side="left", expand=True, fill="x", padx=4)
         ctk.CTkButton(
-            action_frame, text="Restore selected", command=restore_selected_backup, height=38,
-            fg_color=colors["brand"], hover_color=colors["brand_dark"]
+            action_frame,
+            text="Restore selected",
+            command=restore_selected_backup,
+            height=38,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
         ).pack(side="left", expand=True, fill="x", padx=(4, 0))
 
     def print_with_windows_spooler(self, text: str, printer_name: str) -> None:

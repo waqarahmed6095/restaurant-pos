@@ -60,9 +60,11 @@ def _print_image(printer, image_path: str, max_width: int = 576) -> None:
         ratio = max_width / image.width
         image = image.resize(
             (max_width, max(1, int(image.height * ratio))),
-            Image.Resampling.LANCZOS
-            if hasattr(Image, "Resampling")
-            else Image.ANTIALIAS,
+            (
+                Image.Resampling.LANCZOS
+                if hasattr(Image, "Resampling")
+                else Image.ANTIALIAS
+            ),
         )
     printer.set(align="center")
     printer.image(image)
@@ -74,7 +76,9 @@ def print_with_escpos(
     restaurant: dict,
     printer_name: str | None = None,
 ) -> tuple[bool, str, None]:
-    selected_printer = printer_name or restaurant.get("printer_name") or get_default_printer()
+    selected_printer = (
+        printer_name or restaurant.get("printer_name") or get_default_printer()
+    )
     if not selected_printer:
         return False, "No Windows printer is configured or available.", None
 

@@ -134,7 +134,11 @@ def get_sales_analytics(
 
     return sorted(
         totals.values(),
-        key=lambda entry: (-entry["revenue"], entry["name"].casefold(), entry["size"].casefold()),
+        key=lambda entry: (
+            -entry["revenue"],
+            entry["name"].casefold(),
+            entry["size"].casefold(),
+        ),
     )
 
 

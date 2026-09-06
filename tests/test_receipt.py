@@ -3,19 +3,13 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from main import (BACKUP_FILES, build_kitchen_slip_text, build_receipt_text,
-                  build_closing_report_text,
-                  create_backup, restore_backup,
-                  delete_session_order, get_session_id, get_session_orders,
-                  get_sales_analytics, get_session_sales, hash_pin, load_menu_items,
-                  record_session_order, record_session_sale, save_menu_items,
-                  save_pin, verify_pin)
 from controllers.order_controller import OrderController
-from services.validation import validate_contact, validate_image_path
-from ui.current_order_panel import CurrentOrderPanel
-from ui.order_entry_panel import OrderEntryPanel
-from ui.session_orders_panel import SessionOrdersPanel
-from ui.summary_panel import SummaryPanel
+from main import (BACKUP_FILES, build_closing_report_text,
+                  build_kitchen_slip_text, build_receipt_text, create_backup,
+                  delete_session_order, get_sales_analytics, get_session_id,
+                  get_session_orders, get_session_sales, hash_pin,
+                  load_menu_items, record_session_order, record_session_sale,
+                  restore_backup, save_menu_items, save_pin, verify_pin)
 from repositories.menu_repository import \
     load_menu_items as repository_load_menu_items
 from repositories.restaurant_repository import load_restaurant, save_restaurant
@@ -23,6 +17,11 @@ from repositories.sales_repository import \
     get_sales_report as repository_get_sales_report
 from services.receipt_service import \
     build_receipt_text as service_build_receipt_text
+from services.validation import validate_contact, validate_image_path
+from ui.current_order_panel import CurrentOrderPanel
+from ui.order_entry_panel import OrderEntryPanel
+from ui.session_orders_panel import SessionOrdersPanel
+from ui.summary_panel import SummaryPanel
 
 
 class ReceiptFormattingTests(unittest.TestCase):
@@ -94,11 +93,12 @@ class ReceiptFormattingTests(unittest.TestCase):
         ]
 
         receipt = build_receipt_text(order_items, "Indoor", "1")
-        item_line = next(line for line in receipt.splitlines() if "Chicken Burger" in line)
+        item_line = next(
+            line for line in receipt.splitlines() if "Chicken Burger" in line
+        )
 
         self.assertNotIn("Rs", item_line)
         self.assertIn("Rs 598.00", receipt)
-
 
     def test_build_kitchen_slip_text(self):
         order_items = [
@@ -140,9 +140,24 @@ class ReceiptFormattingTests(unittest.TestCase):
         self.assertIn("END OF DAY REPORT", report)
         self.assertIn("Tickets:", report)
         self.assertIn("2026-09-06-001", report)
-        self.assertTrue(any(line.startswith("Subtotal:") and line.endswith("Rs 750.00") for line in report.splitlines()))
-        self.assertTrue(any(line.startswith("Service Charge:") and line.endswith("Rs 30.00") for line in report.splitlines()))
-        self.assertTrue(any(line.startswith("TOTAL:") and line.endswith("Rs 780.00") for line in report.splitlines()))
+        self.assertTrue(
+            any(
+                line.startswith("Subtotal:") and line.endswith("Rs 750.00")
+                for line in report.splitlines()
+            )
+        )
+        self.assertTrue(
+            any(
+                line.startswith("Service Charge:") and line.endswith("Rs 30.00")
+                for line in report.splitlines()
+            )
+        )
+        self.assertTrue(
+            any(
+                line.startswith("TOTAL:") and line.endswith("Rs 780.00")
+                for line in report.splitlines()
+            )
+        )
 
     def test_receipts_include_order_number(self):
         order_items = [
@@ -299,7 +314,12 @@ class ReceiptFormattingTests(unittest.TestCase):
                 {
                     "total": 650.0,
                     "items": [
-                        {"name": "Burger", "size": "Standard", "qty": 2, "total": 600.0},
+                        {
+                            "name": "Burger",
+                            "size": "Standard",
+                            "qty": 2,
+                            "total": 600.0,
+                        },
                         {"name": "Tea", "size": "Small", "qty": 1, "total": 50.0},
                     ],
                 },
@@ -317,7 +337,11 @@ class ReceiptFormattingTests(unittest.TestCase):
                 now=now,
             )
 
-            analytics = get_sales_analytics(storage_path=storage_path, start_date="2026-09-06", end_date="2026-09-06")
+            analytics = get_sales_analytics(
+                storage_path=storage_path,
+                start_date="2026-09-06",
+                end_date="2026-09-06",
+            )
 
             self.assertEqual(analytics[0]["name"], "Burger")
             self.assertEqual(analytics[0]["quantity"], 3)
@@ -334,13 +358,20 @@ class ReceiptFormattingTests(unittest.TestCase):
             try:
                 main.BACKUP_DIR = root / "backups"
                 main.BACKUP_FILES.clear()
-                for filename in ("restaurant.json", "menu_items.json", "session_sales.json", "access.pin"):
+                for filename in (
+                    "restaurant.json",
+                    "menu_items.json",
+                    "session_sales.json",
+                    "access.pin",
+                ):
                     path = root / filename
                     path.write_text(f"original-{filename}", encoding="utf-8")
                     main.BACKUP_FILES[filename] = path
 
                 backup_path = create_backup()
-                main.BACKUP_FILES["restaurant.json"].write_text("changed", encoding="utf-8")
+                main.BACKUP_FILES["restaurant.json"].write_text(
+                    "changed", encoding="utf-8"
+                )
                 restore_backup(backup_path)
 
                 self.assertEqual(

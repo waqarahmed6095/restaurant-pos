@@ -1,7 +1,6 @@
 import re
 from pathlib import Path
 
-
 PHONE_PATTERN = re.compile(r"[+()\d][\d\s().-]{6,19}")
 EMAIL_PATTERN = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
 
@@ -23,11 +22,17 @@ def validate_image_path(path: str, extensions: set[str], label: str) -> str | No
     return None
 
 
-def validate_non_negative_number(value: str, label: str, maximum: float | None = None) -> tuple[float | None, str | None]:
+def validate_non_negative_number(
+    value: str, label: str, maximum: float | None = None
+) -> tuple[float | None, str | None]:
     try:
         number = float(value or 0)
     except ValueError:
         return None, f"Enter a valid {label.lower()}."
     if number < 0 or maximum is not None and number > maximum:
-        return None, f"{label} must be between 0 and {maximum}." if maximum is not None else f"{label} cannot be negative."
+        return None, (
+            f"{label} must be between 0 and {maximum}."
+            if maximum is not None
+            else f"{label} cannot be negative."
+        )
     return number, None
