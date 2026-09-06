@@ -79,6 +79,7 @@ from services.logging_config import configure_logging
 from ui.current_order_panel import CurrentOrderPanel
 from ui.dialogs import show_session_sales
 from ui.order_entry_panel import OrderEntryPanel
+from ui.pin_dialog import prompt_pin
 from ui.receipt_preview import load_preview_image
 from ui.report_dialogs import open_closing_report, open_sales_analytics, open_sales_report
 from ui.session_orders_panel import SessionOrdersPanel
@@ -779,56 +780,28 @@ class RestaurantPOS(ctk.CTk):
         self.state("normal")
         self.lift()
         self.focus_force()
+        colors = configure_theme(self)
         if PIN_PATH.exists():
-            pin = simpledialog.askstring(
-                "Staff login", "Enter PIN:", parent=self, show="*"
-            )
+            pin = prompt_pin(self, "Staff login", colors)
             if not pin or not verify_pin(pin):
                 messagebox.showerror("Staff login", "Incorrect PIN.")
                 return False
         else:
-            pin = simpledialog.askstring(
-                "Create PIN", "Create a PIN for this app:", parent=self, show="*"
-            )
-            confirmation = simpledialog.askstring(
-                "Create PIN", "Confirm your PIN:", parent=self, show="*"
-            )
-            if (
-                not pin
-                or not pin.isdigit()
-                or pin != confirmation
-                or not 4 <= len(pin) <= 12
-            ):
-                messagebox.showerror(
-                    "Create PIN", "PINs must match and contain 4-12 digits."
-                )
+            pin = prompt_pin(self, "Create PIN", colors, confirm=True)
+            if not pin:
                 return False
             save_pin(pin)
         return True
 
     def change_pin(self):
-        current_pin = simpledialog.askstring(
-            "Change PIN", "Enter current PIN:", parent=self, show="*"
-        )
+        colors = configure_theme(self)
+        current_pin = prompt_pin(self, "Current PIN", colors)
         if not current_pin or not verify_pin(current_pin):
             messagebox.showerror("Change PIN", "Current PIN is incorrect.", parent=self)
             return
 
-        new_pin = simpledialog.askstring(
-            "Change PIN", "Enter new PIN (4-12 digits):", parent=self, show="*"
-        )
-        confirmation = simpledialog.askstring(
-            "Change PIN", "Confirm new PIN:", parent=self, show="*"
-        )
-        if (
-            not new_pin
-            or not new_pin.isdigit()
-            or not 4 <= len(new_pin) <= 12
-            or new_pin != confirmation
-        ):
-            messagebox.showerror(
-                "Change PIN", "PINs must match and contain 4-12 digits.", parent=self
-            )
+        new_pin = prompt_pin(self, "New PIN", colors, confirm=True)
+        if not new_pin:
             return
 
         save_pin(new_pin)
