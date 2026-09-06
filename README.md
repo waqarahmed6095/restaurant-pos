@@ -17,9 +17,10 @@ installed.
 - Receipt and kitchen-slip previews
 - ESC/POS printing when supported
 - Automatic Windows printer discovery and spooler fallback
-- Receipt-file fallback when no printer is available
+- Configurable receipt and kitchen printer
 - Session sales and date-filtered sales reports
 - CSV sales-report export
+- Automatic backup and restore for application data
 - Staff PIN authentication and PIN changes
 - Responsive, resizable windows
 
@@ -29,7 +30,8 @@ installed.
 - Python 3.13 or later
 - A Windows printer for physical printing
 
-The application can also save receipt text files when a printer is unavailable.
+The application reports printer errors when a printer is unavailable; it does
+not silently create receipt files instead of printing.
 
 ## Development Setup
 
@@ -113,10 +115,10 @@ reports can be filtered by date and exported as CSV.
 
 ## Printing
 
-On Windows, the application first attempts ESC/POS printing and uses the
-Windows default printer. If ESC/POS is not compatible with the selected
-printer, it falls back to the Windows printer spooler. If printing still fails,
-receipt text is saved under the local `Output` directory.
+On Windows, the application uses the configured printer, or discovers the
+Windows default printer when no printer has been selected. It first attempts
+ESC/POS printing and falls back to the Windows printer spooler. The configured
+logo and footer images are included in ESC/POS output when supported.
 
 The application detects local and connected Windows printers through
 `pywin32`; no printer model is hard-coded.
@@ -130,10 +132,16 @@ Restaurant-specific data is stored outside the project and installed files:
 %APPDATA%\Restaurant POS\menu_items.json
 %APPDATA%\Restaurant POS\session_sales.json
 %APPDATA%\Restaurant POS\access.pin
+%APPDATA%\Restaurant POS\backups\
 ```
 
-Receipt fallback files are written to the project or packaged application's
-`Output` directory. These runtime files are excluded from Git by `.gitignore`.
+Printer output is sent directly to the selected Windows printer.
+
+The application creates a timestamped backup at startup after staff login.
+Backups contain restaurant settings, menu data, session sales, and the staff
+PIN. The **Backup and restore** dashboard action can create an immediate
+backup, export a backup as a ZIP archive, or restore a selected backup. Restore
+replaces the current data and restarts the application.
 
 ## Build
 

@@ -3,9 +3,11 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from main import (build_kitchen_slip_text, build_receipt_text,
+from main import (BACKUP_FILES, build_kitchen_slip_text, build_receipt_text,
+                  build_closing_report_text,
+                  create_backup, restore_backup,
                   delete_session_order, get_session_id, get_session_orders,
-                  get_session_sales, hash_pin, load_menu_items,
+                  get_sales_analytics, get_session_sales, hash_pin, load_menu_items,
                   record_session_order, record_session_sale, save_menu_items,
                   save_pin, verify_pin)
 from repositories.menu_repository import \
@@ -56,6 +58,24 @@ class ReceiptFormattingTests(unittest.TestCase):
         self.assertFalse(any("Service Charge:" in line for line in lines))
         self.assertTrue(any("TOTAL:" in line and "Rs 299.00" in line for line in lines))
 
+    def test_item_table_uses_plain_amounts_and_summary_uses_currency(self):
+        order_items = [
+            {
+                "name": "Chicken Burger",
+                "size": "Standard",
+                "quantity": 2,
+                "unit_price": 299,
+                "total_price": 598,
+            }
+        ]
+
+        receipt = build_receipt_text(order_items, "Indoor", "1")
+        item_line = next(line for line in receipt.splitlines() if "Chicken Burger" in line)
+
+        self.assertNotIn("Rs", item_line)
+        self.assertIn("Rs 598.00", receipt)
+
+
     def test_build_kitchen_slip_text(self):
         order_items = [
             {
@@ -74,6 +94,31 @@ class ReceiptFormattingTests(unittest.TestCase):
         self.assertIn("2", kitchen)
         self.assertNotIn("Subtotal", kitchen)
         self.assertNotIn("TOTAL:", kitchen)
+
+    def test_build_closing_report_summarizes_session_orders(self):
+        orders = [
+            {
+                "order_number": "2026-09-06-001",
+                "include_service_charge": True,
+                "total": 530.0,
+                "items": [{"name": "Burger", "total": 500.0}],
+            },
+            {
+                "order_number": "2026-09-06-002",
+                "include_service_charge": False,
+                "total": 250.0,
+                "items": [{"name": "Tea", "total": 250.0}],
+            },
+        ]
+
+        report = build_closing_report_text(orders, "2026-09-06")
+
+        self.assertIn("END OF DAY REPORT", report)
+        self.assertIn("Tickets:", report)
+        self.assertIn("2026-09-06-001", report)
+        self.assertTrue(any(line.startswith("Subtotal:") and line.endswith("Rs 750.00") for line in report.splitlines()))
+        self.assertTrue(any(line.startswith("Service Charge:") and line.endswith("Rs 30.00") for line in report.splitlines()))
+        self.assertTrue(any(line.startswith("TOTAL:") and line.endswith("Rs 780.00") for line in report.splitlines()))
 
     def test_receipts_include_order_number(self):
         order_items = [
@@ -132,6 +177,7 @@ class ReceiptFormattingTests(unittest.TestCase):
                 "email": "test@example.com",
                 "logo_path": "logo.png",
                 "footer_path": "footer.png",
+                "printer_name": "Receipt Printer",
                 "service_charge": 25,
             }
 
@@ -141,6 +187,7 @@ class ReceiptFormattingTests(unittest.TestCase):
             self.assertEqual(loaded_profile["name"], profile["name"])
             self.assertEqual(loaded_profile["address"], profile["address"])
             self.assertEqual(loaded_profile["service_charge"], 25.0)
+            self.assertEqual(loaded_profile["printer_name"], "Receipt Printer")
             self.assertEqual(loaded_profile["indoor_tables"], 10)
             self.assertEqual(loaded_profile["outdoor_tables"], 25)
 
@@ -219,6 +266,67 @@ class ReceiptFormattingTests(unittest.TestCase):
             self.assertEqual(len(report), 1)
             self.assertEqual(report[0]["session_id"], "2026-07-07")
             self.assertEqual(report[0]["total"], 75.0)
+
+    def test_sales_analytics_aggregates_items_and_sizes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage_path = Path(temp_dir) / "session_sales.json"
+            now = datetime(2026, 9, 6, 19, 0)
+            record_session_order(
+                {
+                    "total": 650.0,
+                    "items": [
+                        {"name": "Burger", "size": "Standard", "qty": 2, "total": 600.0},
+                        {"name": "Tea", "size": "Small", "qty": 1, "total": 50.0},
+                    ],
+                },
+                storage_path=storage_path,
+                now=now,
+            )
+            record_session_order(
+                {
+                    "total": 300.0,
+                    "items": [
+                        {"name": "Burger", "size": "Standard", "qty": 1, "total": 300.0}
+                    ],
+                },
+                storage_path=storage_path,
+                now=now,
+            )
+
+            analytics = get_sales_analytics(storage_path=storage_path, start_date="2026-09-06", end_date="2026-09-06")
+
+            self.assertEqual(analytics[0]["name"], "Burger")
+            self.assertEqual(analytics[0]["quantity"], 3)
+            self.assertEqual(analytics[0]["revenue"], 900.0)
+            self.assertEqual(analytics[1]["name"], "Tea")
+
+    def test_backup_and_restore_round_trip(self):
+        import main
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            original_paths = dict(BACKUP_FILES)
+            original_backup_dir = main.BACKUP_DIR
+            try:
+                main.BACKUP_DIR = root / "backups"
+                main.BACKUP_FILES.clear()
+                for filename in ("restaurant.json", "menu_items.json", "session_sales.json", "access.pin"):
+                    path = root / filename
+                    path.write_text(f"original-{filename}", encoding="utf-8")
+                    main.BACKUP_FILES[filename] = path
+
+                backup_path = create_backup()
+                main.BACKUP_FILES["restaurant.json"].write_text("changed", encoding="utf-8")
+                restore_backup(backup_path)
+
+                self.assertEqual(
+                    main.BACKUP_FILES["restaurant.json"].read_text(encoding="utf-8"),
+                    "original-restaurant.json",
+                )
+            finally:
+                main.BACKUP_FILES.clear()
+                main.BACKUP_FILES.update(original_paths)
+                main.BACKUP_DIR = original_backup_dir
 
     def test_menu_items_are_persisted_to_a_json_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:

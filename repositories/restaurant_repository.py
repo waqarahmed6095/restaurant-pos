@@ -10,6 +10,7 @@ DEFAULT_RESTAURANT = {
     "logo_path": "",
     "app_icon_path": "",
     "footer_path": "",
+    "printer_name": "",
     "service_charge": 0.0,
     "indoor_tables": 10,
     "outdoor_tables": 25,

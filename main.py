@@ -4,7 +4,8 @@ import hmac
 import json
 import os
 import re
-import tempfile
+import shutil
+import sys
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -36,6 +37,8 @@ from repositories.sales_repository import \
 from repositories.sales_repository import \
     get_sales_report as repository_get_sales_report
 from repositories.sales_repository import \
+    get_sales_analytics as repository_get_sales_analytics
+from repositories.sales_repository import \
     get_session_id as repository_get_session_id
 from repositories.sales_repository import \
     get_session_orders as repository_get_session_orders
@@ -47,6 +50,8 @@ from repositories.sales_repository import \
     record_session_sale as repository_record_session_sale
 from services.receipt_service import \
     build_kitchen_slip_text as service_build_kitchen_slip_text
+from services.receipt_service import \
+    build_closing_report_text as service_build_closing_report_text
 from services.receipt_service import \
     build_receipt_text as service_build_receipt_text
 from services.receipt_service import format_currency as service_format_currency
@@ -82,9 +87,55 @@ RESTAURANT_PATH = DATA_DIR / "restaurant.json"
 MENU_ITEMS_PATH = DATA_DIR / "menu_items.json"
 SESSION_SALES_PATH = DATA_DIR / "session_sales.json"
 PIN_PATH = DATA_DIR / "access.pin"
+BACKUP_DIR = DATA_DIR / "backups"
+BACKUP_FILES = {
+    "restaurant.json": RESTAURANT_PATH,
+    "menu_items.json": MENU_ITEMS_PATH,
+    "session_sales.json": SESSION_SALES_PATH,
+    "access.pin": PIN_PATH,
+}
 
 RESTAURANT = repository_load_restaurant(RESTAURANT_PATH)
 MENU_ITEMS = repository_load_menu_items([], MENU_ITEMS_PATH, include_defaults=False)
+
+
+def create_backup() -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = BACKUP_DIR / timestamp
+    backup_path.mkdir(parents=True, exist_ok=True)
+    for filename, source_path in BACKUP_FILES.items():
+        if source_path.is_file():
+            shutil.copy2(source_path, backup_path / filename)
+
+    backups = sorted(
+        (path for path in BACKUP_DIR.iterdir() if path.is_dir()),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for old_backup in backups[30:]:
+        shutil.rmtree(old_backup, ignore_errors=True)
+    return backup_path
+
+
+def list_backups() -> list[Path]:
+    if not BACKUP_DIR.exists():
+        return []
+    return sorted(
+        (path for path in BACKUP_DIR.iterdir() if path.is_dir()),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+
+
+def restore_backup(backup_path: str | os.PathLike) -> None:
+    source_dir = Path(backup_path)
+    if not source_dir.is_dir() or source_dir.parent != BACKUP_DIR:
+        raise ValueError("Invalid backup location")
+    for filename, target_path in BACKUP_FILES.items():
+        source_path = source_dir / filename
+        if source_path.is_file():
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
 
 
 def get_categories() -> list[str]:
@@ -162,6 +213,15 @@ def build_kitchen_slip_text(
     )
 
 
+def build_closing_report_text(orders: list[dict], session_id: str) -> str:
+    return service_build_closing_report_text(
+        orders,
+        session_id,
+        restaurant_name=RESTAURANT["name"] or "Restaurant",
+        service_charge=RESTAURANT["service_charge"],
+    )
+
+
 def get_session_id(now: datetime | None = None) -> str | None:
     return repository_get_session_id(now)
 
@@ -194,6 +254,16 @@ def get_sales_report(
     end_date: str | None = None,
 ) -> list[dict]:
     return repository_get_sales_report(
+        storage_path or SESSION_SALES_PATH, start_date, end_date
+    )
+
+
+def get_sales_analytics(
+    storage_path: str | os.PathLike | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict]:
+    return repository_get_sales_analytics(
         storage_path or SESSION_SALES_PATH, start_date, end_date
     )
 
@@ -263,6 +333,10 @@ class RestaurantPOS(ctk.CTk):
         if not self.authenticated:
             self.quit()
             return
+        try:
+            create_backup()
+        except OSError as exc:
+            print(f"Automatic backup failed: {exc}")
         self.apply_window_icon()
         self.resizable(True, True)
         try:
@@ -306,6 +380,7 @@ class RestaurantPOS(ctk.CTk):
             "logo_path": tk.StringVar(),
             "app_icon_path": tk.StringVar(),
             "footer_path": tk.StringVar(),
+            "printer_name": tk.StringVar(),
             "service_charge": tk.StringVar(value="0"),
             "indoor_tables": tk.StringVar(value="10"),
             "outdoor_tables": tk.StringVar(value="25"),
@@ -488,6 +563,37 @@ class RestaurantPOS(ctk.CTk):
             text="Browse",
             command=lambda: choose_file("app_icon_path"),
             width=72,
+            height=38,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+        ).grid(row=0, column=1)
+
+        ctk.CTkLabel(
+            asset_fields,
+            text="PRINTER",
+            text_color=colors["muted"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 5))
+        printer_values = self.get_windows_printers()
+        printer_row = ctk.CTkFrame(asset_fields, fg_color="transparent")
+        printer_row.grid(row=5, column=0, columnspan=3, sticky="ew")
+        printer_row.grid_columnconfigure(0, weight=1)
+        printer_menu = ttk.Combobox(
+            printer_row,
+            textvariable=values["printer_name"],
+            values=printer_values,
+            state="normal",
+        )
+        printer_menu.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        if printer_values:
+            default_printer = self.get_default_printer()
+            values["printer_name"].set(default_printer or printer_values[0])
+        ctk.CTkButton(
+            printer_row,
+            text="Refresh",
+            command=lambda: printer_menu.configure(values=self.get_windows_printers()),
+            width=82,
             height=38,
             fg_color=colors["soft"],
             hover_color=colors["line"],
@@ -935,6 +1041,7 @@ class RestaurantPOS(ctk.CTk):
             row=1, column=1, rowspan=2, sticky="nsew", padx=(10, 4), pady=(8, 18)
         )
         middle_container.columnconfigure(0, weight=1)
+        middle_container.rowconfigure(0, weight=0)
         middle_container.rowconfigure(1, weight=1)
 
         table_frame = ctk.CTkFrame(
@@ -990,10 +1097,10 @@ class RestaurantPOS(ctk.CTk):
         )
         self.update_table_numbers()
 
-        summary_frame = ctk.CTkFrame(
-            middle_container, fg_color=colors["brand"], corner_radius=14
+        summary_frame = ctk.CTkFrame(self, fg_color=colors["brand"], corner_radius=14)
+        summary_frame.grid(
+            row=1, column=2, rowspan=2, sticky="nsew", padx=(4, 18), pady=(8, 18)
         )
-        summary_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         ctk.CTkLabel(
             summary_frame,
             text="CURRENT TOTAL",
@@ -1027,8 +1134,44 @@ class RestaurantPOS(ctk.CTk):
         ).pack(fill="x", padx=16, pady=(0, 16))
         ctk.CTkButton(
             summary_frame,
+            text="Sales analytics",
+            command=self.display_sales_analytics,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            summary_frame,
+            text="End-of-day closing report",
+            command=self.display_closing_report,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            summary_frame,
             text="Change PIN",
             command=self.change_pin,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            summary_frame,
+            text="Printer settings",
+            command=self.open_printer_settings,
+            height=38,
+            fg_color="#A94353",
+            hover_color=colors["brand_dark"],
+            anchor="w",
+        ).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(
+            summary_frame,
+            text="Backup and restore",
+            command=self.open_backup_restore,
             height=38,
             fg_color="#A94353",
             hover_color=colors["brand_dark"],
@@ -1043,11 +1186,13 @@ class RestaurantPOS(ctk.CTk):
             hover_color=colors["brand_dark"],
             text_color="white",
             font=("Segoe UI", 11, "bold"),
-        ).grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        ).grid(row=2, column=0, sticky="ew", pady=(10, 0))
 
-        orders_panel = ctk.CTkFrame(self, fg_color=colors["panel"], corner_radius=14)
+        orders_panel = ctk.CTkFrame(
+            middle_container, fg_color=colors["panel"], corner_radius=14
+        )
         orders_panel.grid(
-            row=1, column=2, rowspan=2, sticky="nsew", padx=(4, 18), pady=(8, 18)
+            row=0, column=0, sticky="nsew", pady=(0, 10)
         )
 
         ctk.CTkLabel(
@@ -1073,6 +1218,7 @@ class RestaurantPOS(ctk.CTk):
             columns=("order", "time", "items", "total"),
             show="headings",
             selectmode="browse",
+            height=4,
             style="Modern.Treeview",
         )
         self.session_orders_listbox.heading("order", text="Order")
@@ -1122,7 +1268,7 @@ class RestaurantPOS(ctk.CTk):
             detail_frame,
             columns=("item", "size", "qty", "total"),
             show="headings",
-            height=3,
+            height=2,
             style="Modern.Treeview",
         )
         self.order_detail_tree.heading("item", text="Item")
@@ -1845,6 +1991,220 @@ class RestaurantPOS(ctk.CTk):
             "Session Sales", f"Session Sales: {format_currency(current_session_sales)}"
         )
 
+    def display_closing_report(self):
+        session_id = get_session_id(datetime.now())
+        if session_id is None:
+            messagebox.showinfo(
+                "Closing report",
+                "There is no active session. Closing sessions run from 5:00 PM to 3:59 AM.",
+                parent=self,
+            )
+            return
+
+        orders = get_session_orders(now=datetime.now())
+        report_text = build_closing_report_text(orders, session_id)
+        report_window = tk.Toplevel(self)
+        report_window.title(f"End-of-day report - {session_id}")
+        report_window.geometry("620x720")
+        report_window.minsize(520, 560)
+        report_window.transient(self)
+
+        colors = configure_theme(self)
+        report_window.configure(bg=colors["canvas"])
+        ctk.CTkLabel(
+            report_window,
+            text="End-of-day closing report",
+            text_color=colors["ink"],
+            font=("Segoe UI", 21, "bold"),
+        ).pack(anchor="w", padx=18, pady=(18, 2))
+        ctk.CTkLabel(
+            report_window,
+            text=f"Session {session_id}  ·  {len(orders)} ticket(s)",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", padx=18, pady=(0, 12))
+
+        text_area = tk.Text(
+            report_window,
+            wrap="none",
+            padx=14,
+            pady=14,
+            font=("Courier New", 10),
+            bg=colors["panel"],
+            fg=colors["ink"],
+            relief="flat",
+        )
+        text_area.insert("1.0", report_text)
+        text_area.configure(state="disabled")
+        text_area.pack(fill="both", expand=True, padx=18, pady=(0, 12))
+
+        action_frame = ctk.CTkFrame(report_window, fg_color="transparent")
+        action_frame.pack(fill="x", padx=18, pady=(0, 18))
+
+        def export_report():
+            target = filedialog.asksaveasfilename(
+                parent=report_window,
+                title="Export closing report",
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt")],
+            )
+            if not target:
+                return
+            Path(target).write_text(report_text, encoding="utf-8")
+            messagebox.showinfo(
+                "Closing report", "The closing report was exported.", parent=report_window
+            )
+
+        def print_report():
+            def worker():
+                success, message, _ = self.print_with_escpos(report_text)
+                self.after(
+                    0,
+                    lambda: messagebox.showinfo(
+                        "Closing report" if success else "Print error",
+                        message,
+                        parent=report_window,
+                    ),
+                )
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        ctk.CTkButton(
+            action_frame,
+            text="Export report",
+            command=export_report,
+            height=38,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+        ).pack(side="left", expand=True, fill="x", padx=(0, 6))
+        ctk.CTkButton(
+            action_frame,
+            text="Print report",
+            command=print_report,
+            height=38,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 11, "bold"),
+        ).pack(side="left", expand=True, fill="x", padx=(6, 0))
+
+    def display_sales_analytics(self):
+        analytics_window = tk.Toplevel(self)
+        analytics_window.title("Sales analytics")
+        analytics_window.geometry("760x620")
+        analytics_window.minsize(640, 480)
+        analytics_window.transient(self)
+        colors = configure_theme(self)
+        analytics_window.configure(bg=colors["canvas"])
+        analytics_window.columnconfigure(0, weight=1)
+        analytics_window.rowconfigure(2, weight=1)
+
+        ctk.CTkLabel(
+            analytics_window,
+            text="Sales analytics",
+            text_color=colors["ink"],
+            font=("Segoe UI", 21, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 2))
+        ctk.CTkLabel(
+            analytics_window,
+            text="See which menu items sell most and generate the most revenue.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+        ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 12))
+
+        filter_frame = ctk.CTkFrame(analytics_window, fg_color=colors["panel"], corner_radius=10)
+        filter_frame.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        filter_frame.columnconfigure(0, weight=1)
+        filter_frame.rowconfigure(1, weight=1)
+        controls = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        controls.grid(row=0, column=0, sticky="ew", padx=12, pady=12)
+        start_var = tk.StringVar()
+        end_var = tk.StringVar()
+        ttk.Label(controls, text="From (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
+        ttk.Entry(controls, textvariable=start_var, width=14).pack(side="left", padx=(0, 10))
+        ttk.Label(controls, text="To (YYYY-MM-DD)").pack(side="left", padx=(0, 4))
+        ttk.Entry(controls, textvariable=end_var, width=14).pack(side="left", padx=(0, 10))
+
+        tree = ttk.Treeview(
+            filter_frame,
+            columns=("item", "size", "quantity", "revenue"),
+            show="headings",
+            style="Modern.Treeview",
+        )
+        tree.heading("item", text="Item")
+        tree.heading("size", text="Size")
+        tree.heading("quantity", text="Qty sold")
+        tree.heading("revenue", text="Revenue")
+        tree.column("item", width=320, anchor="w")
+        tree.column("size", width=130, anchor="w")
+        tree.column("quantity", width=100, anchor="center")
+        tree.column("revenue", width=130, anchor="e")
+        tree.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=(0, 12))
+        scrollbar = ttk.Scrollbar(filter_frame, orient="vertical", command=tree.yview)
+        scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 12), pady=(0, 12))
+        tree.configure(yscrollcommand=scrollbar.set)
+        summary_label = ctk.CTkLabel(
+            filter_frame,
+            text="0 items sold  ·  Revenue: Rs 0.00",
+            text_color=colors["brand"],
+            font=("Segoe UI", 12, "bold"),
+        )
+        summary_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 12))
+
+        def refresh_analytics():
+            start_date = start_var.get().strip() or None
+            end_date = end_var.get().strip() or None
+            try:
+                for value in (start_date, end_date):
+                    if value:
+                        datetime.strptime(value, "%Y-%m-%d")
+                if start_date and end_date and start_date > end_date:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror(
+                    "Sales analytics",
+                    "Enter a valid date range in YYYY-MM-DD format.",
+                    parent=analytics_window,
+                )
+                return
+
+            analytics = get_sales_analytics(start_date=start_date, end_date=end_date)
+            for row in tree.get_children():
+                tree.delete(row)
+            total_quantity = 0
+            total_revenue = 0.0
+            for item in analytics:
+                quantity = int(item["quantity"])
+                revenue = float(item["revenue"])
+                total_quantity += quantity
+                total_revenue += revenue
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        item["name"],
+                        item["size"],
+                        quantity,
+                        format_currency(revenue),
+                    ),
+                )
+            if not analytics:
+                tree.insert("", "end", values=("No item sales recorded", "", "", ""))
+            summary_label.configure(
+                text=f"{total_quantity} items sold  ·  Revenue: {format_currency(total_revenue)}"
+            )
+
+        ctk.CTkButton(
+            controls,
+            text="Refresh",
+            command=refresh_analytics,
+            width=90,
+            height=32,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+        ).pack(side="left")
+        refresh_analytics()
+
     def display_sales_report(self):
         report_window = tk.Toplevel(self)
         report_window.title("Sales Report")
@@ -2156,18 +2516,6 @@ class RestaurantPOS(ctk.CTk):
         self.total_label.configure(text=f"Total: {format_currency(total_amount)}")
         self.update_session_sales_label()
 
-    def print_to_file(self, text: str) -> str:
-        """Save receipt to a file when printer is unavailable."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(os.path.dirname(__file__), "Output")
-        os.makedirs(output_dir, exist_ok=True)
-
-        file_path = os.path.join(output_dir, f"receipt_{timestamp}.txt")
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(text)
-
-        return file_path
-
     def get_windows_printers(self) -> list[str]:
         if not WIN32_PRINT_AVAILABLE or win32print is None:
             return []
@@ -2185,6 +2533,181 @@ class RestaurantPOS(ctk.CTk):
         except Exception:
             printers = self.get_windows_printers()
             return printers[0] if printers else None
+
+    def open_printer_settings(self):
+        settings_window = tk.Toplevel(self)
+        settings_window.title("Printer settings")
+        settings_window.geometry("520x220")
+        settings_window.resizable(False, False)
+        settings_window.transient(self)
+        settings_window.grab_set()
+
+        colors = configure_theme(self)
+        settings_window.configure(bg=colors["canvas"])
+        ctk.CTkLabel(
+            settings_window,
+            text="Printer settings",
+            text_color=colors["ink"],
+            font=("Segoe UI", 20, "bold"),
+        ).pack(anchor="w", padx=22, pady=(20, 2))
+        ctk.CTkLabel(
+            settings_window,
+            text="Choose the Windows printer used for receipts and kitchen slips.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", padx=22, pady=(0, 14))
+
+        printer_var = tk.StringVar(value=RESTAURANT.get("printer_name", ""))
+        printer_row = ctk.CTkFrame(settings_window, fg_color="transparent")
+        printer_row.pack(fill="x", padx=22)
+        printer_row.columnconfigure(0, weight=1)
+        printer_menu = ttk.Combobox(
+            printer_row,
+            textvariable=printer_var,
+            values=self.get_windows_printers(),
+            state="normal",
+        )
+        printer_menu.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        ctk.CTkButton(
+            printer_row,
+            text="Refresh",
+            command=lambda: printer_menu.configure(values=self.get_windows_printers()),
+            width=86,
+            height=36,
+            fg_color=colors["soft"],
+            hover_color=colors["line"],
+            text_color=colors["ink"],
+        ).grid(row=0, column=1)
+
+        def save_printer_setting():
+            restaurant = RESTAURANT.copy()
+            restaurant["printer_name"] = printer_var.get().strip()
+            save_restaurant(restaurant)
+            settings_window.destroy()
+
+        ctk.CTkButton(
+            settings_window,
+            text="Save printer",
+            command=save_printer_setting,
+            height=38,
+            fg_color=colors["brand"],
+            hover_color=colors["brand_dark"],
+            font=("Segoe UI", 11, "bold"),
+        ).pack(fill="x", padx=22, pady=18)
+
+    def open_backup_restore(self):
+        backup_window = tk.Toplevel(self)
+        backup_window.title("Backup and restore")
+        backup_window.geometry("560x430")
+        backup_window.minsize(500, 360)
+        backup_window.transient(self)
+        backup_window.grab_set()
+        colors = configure_theme(self)
+        backup_window.configure(bg=colors["canvas"])
+
+        ctk.CTkLabel(
+            backup_window,
+            text="Backup and restore",
+            text_color=colors["ink"],
+            font=("Segoe UI", 20, "bold"),
+        ).pack(anchor="w", padx=20, pady=(18, 2))
+        ctk.CTkLabel(
+            backup_window,
+            text="Backups include settings, menu, sales, and staff access data.",
+            text_color=colors["muted"],
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", padx=20, pady=(0, 12))
+
+        list_frame = ctk.CTkFrame(backup_window, fg_color=colors["panel"], corner_radius=10)
+        list_frame.pack(fill="both", expand=True, padx=20, pady=(0, 12))
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+        backup_list = tk.Listbox(
+            list_frame,
+            activestyle="none",
+            font=("Segoe UI", 11),
+            bg=colors["panel"],
+            fg=colors["ink"],
+            relief="flat",
+        )
+        backup_list.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+        backup_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=backup_list.yview)
+        backup_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 10), pady=10)
+        backup_list.configure(yscrollcommand=backup_scroll.set)
+
+        backups = list_backups()
+        for backup in backups:
+            backup_list.insert("end", backup.name)
+
+        def refresh_backups():
+            backup_list.delete(0, "end")
+            for backup in list_backups():
+                backup_list.insert("end", backup.name)
+
+        def make_backup():
+            try:
+                backup = create_backup()
+                refresh_backups()
+                messagebox.showinfo(
+                    "Backup and restore", f"Backup created: {backup.name}", parent=backup_window
+                )
+            except OSError as exc:
+                messagebox.showerror("Backup and restore", str(exc), parent=backup_window)
+
+        def export_backup():
+            selection = backup_list.curselection()
+            if not selection:
+                messagebox.showinfo("Backup and restore", "Select a backup first.", parent=backup_window)
+                return
+            source = list_backups()[selection[0]]
+            target = filedialog.asksaveasfilename(
+                parent=backup_window,
+                title="Export backup archive",
+                defaultextension=".zip",
+                filetypes=[("ZIP archives", "*.zip")],
+            )
+            if target:
+                shutil.make_archive(str(Path(target).with_suffix("")), "zip", source)
+                messagebox.showinfo("Backup and restore", "Backup exported.", parent=backup_window)
+
+        def restore_selected_backup():
+            selection = backup_list.curselection()
+            if not selection:
+                messagebox.showinfo("Backup and restore", "Select a backup first.", parent=backup_window)
+                return
+            source = list_backups()[selection[0]]
+            if not messagebox.askyesno(
+                "Restore backup",
+                "Restore this backup? The current data will be replaced and the app will restart.",
+                parent=backup_window,
+            ):
+                return
+            try:
+                restore_backup(source)
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("Restore backup", str(exc), parent=backup_window)
+                return
+            messagebox.showinfo(
+                "Restore backup",
+                "Backup restored. The application will now restart.",
+                parent=backup_window,
+            )
+            self.destroy()
+            os.execl(sys.executable, sys.executable, *sys.argv)
+
+        action_frame = ctk.CTkFrame(backup_window, fg_color="transparent")
+        action_frame.pack(fill="x", padx=20, pady=(0, 18))
+        ctk.CTkButton(action_frame, text="Create backup", command=make_backup, height=38).pack(
+            side="left", expand=True, fill="x", padx=(0, 4)
+        )
+        ctk.CTkButton(
+            action_frame, text="Export selected", command=export_backup, height=38,
+            fg_color=colors["soft"], hover_color=colors["line"], text_color=colors["ink"]
+        ).pack(side="left", expand=True, fill="x", padx=4)
+        ctk.CTkButton(
+            action_frame, text="Restore selected", command=restore_selected_backup, height=38,
+            fg_color=colors["brand"], hover_color=colors["brand_dark"]
+        ).pack(side="left", expand=True, fill="x", padx=(4, 0))
 
     def print_with_windows_spooler(self, text: str, printer_name: str) -> None:
         if not WIN32_PRINT_AVAILABLE or win32print is None:
@@ -2204,20 +2727,24 @@ class RestaurantPOS(ctk.CTk):
             win32print.ClosePrinter(handle)
 
     def print_with_escpos(self, text: str, printer_name: str | None = None) -> tuple:
+        """Print directly to the selected Windows printer.
+
+        Returns ``(success, message, None)``. No receipt file is created when
+        printing fails because the user requested physical printer output.
         """
-        Print to ESC/POS printer. If printer is unavailable, save to file instead.
-        Returns: (success: bool, message: str, file_path: str or None)
-        """
-        printer_name = printer_name or self.get_default_printer()
+        printer_name = printer_name or RESTAURANT.get("printer_name") or self.get_default_printer()
         if not printer_name:
-            file_path = self.print_to_file(text)
-            return (False, f"No Windows printer found, saved to file: {file_path}", file_path)
+            return (False, "No Windows printer is configured or available.", None)
 
         if ESC_POS_AVAILABLE and Win32Raw is not None:
             try:
                 printer = None
                 try:
                     printer = Win32Raw(printer_name)
+                    for image_path, max_width in (
+                        (RESTAURANT.get("logo_path", ""), 576),
+                    ):
+                        self.print_escpos_image(printer, image_path, max_width)
                     printer.set(align="center", bold=True)
                     printer.textln(RESTAURANT["name"])
 
@@ -2231,6 +2758,10 @@ class RestaurantPOS(ctk.CTk):
                     printer.set(align="left")
                     for line in text.splitlines():
                         printer.textln(line)
+
+                    self.print_escpos_image(
+                        printer, RESTAURANT.get("footer_path", ""), 576
+                    )
 
                     printer.cut()
                     return (True, "sent to printer", None)
@@ -2247,13 +2778,23 @@ class RestaurantPOS(ctk.CTk):
             self.print_with_windows_spooler(text, printer_name)
             return (True, f"sent to printer: {printer_name}", None)
         except Exception as printer_error:
-            print(f"Windows printer unavailable: {printer_error}")
-            file_path = self.print_to_file(text)
-            return (
-                False,
-                f"Printer unavailable, saved to file: {file_path}",
-                file_path,
+            return (False, f"Unable to print on {printer_name}: {printer_error}", None)
+
+    def print_escpos_image(self, printer, image_path: str, max_width: int) -> None:
+        if not PIL_AVAILABLE or not image_path or not os.path.isfile(image_path):
+            return
+        image = Image.open(image_path).convert("L")
+        if image.width > max_width:
+            ratio = max_width / image.width
+            image = image.resize(
+                (max_width, max(1, int(image.height * ratio))),
+                Image.Resampling.LANCZOS
+                if hasattr(Image, "Resampling")
+                else Image.ANTIALIAS,
             )
+        printer.set(align="center")
+        printer.image(image)
+        printer.textln("")
 
     def print_slip(self):
         if not self.order_items:
@@ -2317,42 +2858,22 @@ class RestaurantPOS(ctk.CTk):
     def do_print_slip(self, receipt_text: str, kitchen_text: str):
         """Background thread worker for printing receipts."""
         try:
-            receipt_temp = tempfile.NamedTemporaryFile(
-                "w", delete=False, suffix=".txt", encoding="utf-8"
-            )
-            receipt_temp.write(receipt_text)
-            receipt_temp.close()
-
-            kitchen_temp = tempfile.NamedTemporaryFile(
-                "w", delete=False, suffix="_kitchen.txt", encoding="utf-8"
-            )
-            kitchen_temp.write(kitchen_text)
-            kitchen_temp.close()
-
-            temp_receipt_filename = receipt_temp.name
-            temp_kitchen_filename = kitchen_temp.name
-
             if os.name == "nt":
-                # Try to print with ESC/POS (will fall back to file if printer unavailable)
-                receipt_success, receipt_message, receipt_file = self.print_with_escpos(
+                receipt_success, receipt_message, _ = self.print_with_escpos(
                     receipt_text
                 )
-                kitchen_success, kitchen_message, kitchen_file = self.print_with_escpos(
+                kitchen_success, kitchen_message, _ = self.print_with_escpos(
                     kitchen_text
                 )
 
                 if receipt_success and kitchen_success:
                     printer_message = "Receipts sent to printer successfully"
-                elif receipt_file and kitchen_file:
-                    printer_message = f"Printer unavailable - saved to:\n  Receipt: {receipt_file}\n  Kitchen: {kitchen_file}"
                 else:
                     printer_message = (
                         f"Receipt: {receipt_message}\nKitchen: {kitchen_message}"
                     )
             else:
-                printer_message = (
-                    f"Saved to {temp_receipt_filename} and {temp_kitchen_filename}"
-                )
+                printer_message = "Automatic printing is only supported on Windows."
 
             # Show completion message in UI thread
             self.after(0, lambda: messagebox.showinfo("Print Status", printer_message))

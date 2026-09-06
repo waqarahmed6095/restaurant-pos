@@ -107,3 +107,62 @@ def build_kitchen_slip_text(
 
     lines.extend(["=" * 48, "Please prepare the items listed above.", ""])
     return "\n".join(lines)
+
+
+def build_closing_report_text(
+    orders: list[dict],
+    session_id: str,
+    restaurant_name: str = "Restaurant",
+    service_charge: float = 0.0,
+) -> str:
+    width = 48
+    subtotal = 0.0
+    applied_service_charge = 0.0
+    total = 0.0
+
+    lines = [
+        restaurant_name.center(width),
+        "END OF DAY REPORT".center(width),
+        f"Session: {session_id}",
+        f"Generated: {datetime.now().strftime('%d-%m-%Y %I:%M %p')}",
+        "=" * width,
+        "",
+        f"{'Tickets:':<24}{len(orders):>24}",
+        "",
+        f"{'Order':<16}{'Items':>8}{'Total':>24}",
+        "-" * width,
+    ]
+
+    for index, order in enumerate(orders, start=1):
+        order_items = order.get("items", []) or []
+        order_subtotal = sum(
+            float(item.get("total", item.get("total_price", 0.0)))
+            for item in order_items
+        )
+        order_total = float(order.get("total", order.get("amount", order_subtotal)))
+        order_service_charge = max(0.0, order_total - order_subtotal)
+        if not order.get("include_service_charge", bool(order_service_charge)):
+            order_service_charge = 0.0
+        if order_service_charge == 0.0 and order.get("include_service_charge"):
+            order_service_charge = min(service_charge, max(0.0, order_total - order_subtotal))
+
+        order_number = str(order.get("order_number", f"#{index}"))[:16]
+        lines.append(
+            f"{order_number:<16}{len(order_items):>8}{format_currency(order_total):>24}"[:width]
+        )
+        subtotal += order_subtotal
+        applied_service_charge += order_service_charge
+        total += order_total
+
+    lines.extend(
+        [
+            "-" * width,
+            f"{'Subtotal:':<24}{format_currency(subtotal):>24}",
+            f"{'Service Charge:':<24}{format_currency(applied_service_charge):>24}",
+            f"{'TOTAL:':<24}{format_currency(total):>24}",
+            "=" * width,
+            "Closeout is a report only; orders remain stored.",
+            "",
+        ]
+    )
+    return "\n".join(lines)

@@ -88,6 +88,56 @@ def get_sales_report(
     return sorted(report, key=lambda entry: entry["session_id"], reverse=True)
 
 
+def get_sales_analytics(
+    storage_path: str | os.PathLike,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict]:
+    totals: dict[tuple[str, str], dict] = {}
+    for session_id, value in _load_data(storage_path).items():
+        session_id = str(session_id)
+        if start_date and session_id < start_date:
+            continue
+        if end_date and session_id > end_date:
+            continue
+        if not isinstance(value, dict):
+            continue
+
+        for order in value.get("orders", []) or []:
+            if not isinstance(order, dict):
+                continue
+            for item in order.get("items", []) or []:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name", "")).strip() or "Unknown item"
+                size = str(item.get("size", "")).strip()
+                key = (name, size)
+                summary = totals.setdefault(
+                    key,
+                    {"name": name, "size": size, "quantity": 0, "revenue": 0.0},
+                )
+                try:
+                    quantity = int(item.get("qty", item.get("quantity", 1)))
+                except (TypeError, ValueError):
+                    quantity = 0
+                try:
+                    revenue = float(
+                        item.get(
+                            "total",
+                            item.get("total_price", item.get("amount", 0.0)),
+                        )
+                    )
+                except (TypeError, ValueError):
+                    revenue = 0.0
+                summary["quantity"] += quantity
+                summary["revenue"] += revenue
+
+    return sorted(
+        totals.values(),
+        key=lambda entry: (-entry["revenue"], entry["name"].casefold(), entry["size"].casefold()),
+    )
+
+
 def get_next_order_number(
     storage_path: str | os.PathLike,
     now: datetime | None = None,
